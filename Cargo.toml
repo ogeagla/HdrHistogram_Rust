@@ -1,0 +1,4 @@
+[package]
+name = "hdr_histogram"
+version = "0.0.1"
+authors = [ "Octavian Geagla <ogeagla@gmail.com>" ]

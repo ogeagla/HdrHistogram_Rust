@@ -11,6 +11,8 @@ pub struct SimpleHdrHistogram {
     pub sub_bucket_half_count: i32,
     pub sub_bucket_half_count_magnitude: i32,
     pub counts: Vec<u64>,
+    pub counts_array_length: i32,
+    pub normalizing_index_offset: i32,
 }
 
 
@@ -30,6 +32,8 @@ impl Default for SimpleHdrHistogram {
             sub_bucket_half_count: 0,
             sub_bucket_half_count_magnitude: 0,
             counts: Vec::new(),
+            counts_array_length: 0,
+            normalizing_index_offset: 0,
         }
     }
 }
@@ -84,7 +88,15 @@ Result<i32, String> {
     }
 
     fn increment_count_at_index(&self, index: i32) -> Result<(), String> {
-        Ok(())
+        let normalized_index =
+            self.normalize_index(index, self.normalizing_index_offset, self.counts_array_length);
+        match normalized_index {
+            Ok(the_index) =>
+                self.counts[the_index] = self.counts[the_index] + 1;
+                Ok(()),
+            Err(err) =>
+                Err(err)
+        }
     }
 
 
@@ -104,11 +116,11 @@ Result<i32, String> {
             Ok(counts_index) =>
                 match self.increment_count_at_index(counts_index) {
                     Ok(_) =>
-                    if true {
-                        Ok(())
-                    } else {
-                        Err(String::from("Could not record single value"))
-                    },
+                        if true {
+                            Ok(())
+                        } else {
+                            Err(String::from("Could not record single value"))
+                        },
                     Err(err) => Err(String::from("Could not increment stuff"))
                 },
             Err(err) => Err(String::from("Could not get index"))

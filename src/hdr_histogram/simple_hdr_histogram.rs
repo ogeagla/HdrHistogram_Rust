@@ -5,11 +5,11 @@
 */
 pub struct SimpleHdrHistogram {
     pub leading_zeros_count_base: usize,
-    pub sub_bucket_mask: i64,
-    pub unit_magnitude: usize,
+    pub sub_bucket_mask: u64,
+    pub unit_magnitude: u32,
     pub sub_bucket_count: usize,
     pub sub_bucket_half_count: usize,
-    pub sub_bucket_half_count_magnitude: i32,
+    pub sub_bucket_half_count_magnitude: u32,
     pub counts: Vec<u64>,
     pub counts_array_length: usize,
     pub normalizing_index_offset: usize,
@@ -44,19 +44,19 @@ pub trait HistogramBase {
 
 
     //TODO should be default impl of this trait
-    fn record_single_value(&mut self, value: i64) -> Result<(), String>;
+    fn record_single_value(&mut self, value: u64) -> Result<(), String>;
 
     //TODO should be default impl of this trait
-    fn counts_array_index(&self, value: i64) -> Result<usize, String>;
+    fn counts_array_index(&self, value: u64) -> Result<usize, String>;
 
     //TODO should be default impl of this trait
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
 
     //TODO should be default impl of this trait
-    fn get_bucket_index(&self, value: i64) -> usize;
+    fn get_bucket_index(&self, value: u64) -> usize;
 
     //TODO should be default impl of this trait
-    fn get_sub_bucket_index(&self, value: i64, bucket_index: usize) -> usize;
+    fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize;
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
     fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
@@ -101,17 +101,17 @@ Result<usize, String> {
     }
 
 
-    fn get_sub_bucket_index(&self, value: i64, bucket_index: usize) -> usize {
-        let sum = bucket_index + self.unit_magnitude;
+    fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize {
+        let sum = bucket_index + self.unit_magnitude as usize;
         value.rotate_right(sum as u32) as usize
     }
 
-    fn get_bucket_index(&self, value: i64) -> usize {
+    fn get_bucket_index(&self, value: u64) -> usize {
         let valueOrred = value | self.sub_bucket_mask;
         self.leading_zeros_count_base - (valueOrred.leading_zeros() as usize)
     }
 
-    fn record_single_value(&mut self, value: i64) -> Result<(), String> {
+    fn record_single_value(&mut self, value: u64) -> Result<(), String> {
 
         match self.counts_array_index(value) {
             Ok(counts_index) =>
@@ -129,7 +129,7 @@ Result<usize, String> {
 
     }
 
-    fn counts_array_index(&self, value: i64) -> Result<usize, String> {
+    fn counts_array_index(&self, value: u64) -> Result<usize, String> {
         if value < 0 {
             Err(String::from("Histogram recorded values cannot be negative."))
         } else {

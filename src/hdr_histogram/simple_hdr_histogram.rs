@@ -6,7 +6,7 @@ pub trait Histogram {
     fn static_fun(thing: &'static str) -> Self;
 }
 
-pub struct SimpleHdrHistogram { something: &'static str }
+pub struct SimpleHdrHistogram { pub something: &'static str }
 
 impl Histogram for SimpleHdrHistogram {
 

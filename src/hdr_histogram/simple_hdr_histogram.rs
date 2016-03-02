@@ -18,3 +18,8 @@ impl Histogram for SimpleHdrHistogram {
         SimpleHdrHistogram { something: "stuff" }
     }
 }
+
+#[test]
+fn it_works() {
+    println!("sure does!");
+}

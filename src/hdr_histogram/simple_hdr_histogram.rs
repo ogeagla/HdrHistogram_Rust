@@ -34,7 +34,7 @@ impl Histogram for SimpleHdrHistogram {
 
     fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32 {
         let sum = bucket_index + self.unit_magnitude;
-        sum.rotate_right(1)
+        value.rotate_right(sum as u32) as i32
     }
 
     fn get_bucket_index(&self, value: i64) -> i32 {

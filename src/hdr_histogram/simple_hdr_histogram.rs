@@ -17,6 +17,17 @@ pub trait Histogram {
 pub struct SimpleHdrHistogram {
     pub leading_zeros_count_base: i32,
     pub sub_bucket_mask: i64,
+    pub unit_magnitude: i32,
+}
+
+impl Default for SimpleHdrHistogram {
+    fn default () -> SimpleHdrHistogram {
+        SimpleHdrHistogram {
+            leading_zeros_count_base: 0,
+            sub_bucket_mask: 0,
+            unit_magnitude: 0
+        }
+    }
 }
 
 impl Histogram for SimpleHdrHistogram {
@@ -54,10 +65,7 @@ impl Histogram for SimpleHdrHistogram {
 
 #[test]
 fn can_record_single_value() {
-    let the_hist = SimpleHdrHistogram {
-        leading_zeros_count_base: 0,
-        sub_bucket_mask: 0
-    };
+    let the_hist = SimpleHdrHistogram { ..Default::default() };
     let result = the_hist.record_single_value(99);
 
     match result {
@@ -68,10 +76,7 @@ fn can_record_single_value() {
 
 #[test]
 fn can_compute_counts_array_index() {
-    let the_hist = SimpleHdrHistogram {
-        leading_zeros_count_base: 0,
-        sub_bucket_mask: 0
-    };
+    let the_hist = SimpleHdrHistogram { ..Default::default() };
     let result = the_hist.counts_array_index(99);
 
     match result {
@@ -82,20 +87,14 @@ fn can_compute_counts_array_index() {
 
 #[test]
 fn can_get_bucket_index() {
-    let the_hist = SimpleHdrHistogram {
-        leading_zeros_count_base: 0,
-        sub_bucket_mask: 0
-    };
+    let the_hist = SimpleHdrHistogram { ..Default::default() };
     let result = the_hist.get_bucket_index(99);
     assert_eq!(result, 0)
 }
 
 #[test]
 fn can_get_sub_bucket_index() {
-    let the_hist = SimpleHdrHistogram {
-        leading_zeros_count_base: 0,
-        sub_bucket_mask: 0
-    };
+    let the_hist = SimpleHdrHistogram { ..Default::default() };
     let result = the_hist.get_sub_bucket_index(99, 1);
     assert_eq!(result, 0)
 }

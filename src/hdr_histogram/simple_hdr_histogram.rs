@@ -1,12 +1,16 @@
 pub trait Histogram {
-    //instance method example
-    fn inst_func(&self) -> &'static str;
 
-    //static method example
-    fn static_fun(thing: &'static str) -> Self;
-
+    //TODO should be default impl of this trait
     fn record_single_value(&self, value: i64) -> Result<(), String>;
 
+    //TODO should be default impl of this trait
+    fn counts_array_index(&self, value: i64) -> Result<i32, String>;
+
+    //TODO should be default impl of this trait
+    fn get_bucket_index(&self, value: i64) -> i32;
+
+    //TODO should be default impl of this trait
+    fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32;
 
 }
 
@@ -14,25 +18,38 @@ pub struct SimpleHdrHistogram { pub something: &'static str }
 
 impl Histogram for SimpleHdrHistogram {
 
-    fn inst_func(&self) -> &'static str {
-        "hello from instance"
+    fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32 {
+        0
     }
 
-    fn static_fun(thing: &'static str) -> SimpleHdrHistogram {
-        SimpleHdrHistogram { something: "stuff" }
+    fn get_bucket_index(&self, value: i64) -> i32 {
+        0
     }
 
     fn record_single_value(&self, value: i64) -> Result<(), String> {
+
+        let counts_index = self.counts_array_index(value);
+
         if true {
             Ok(())
         } else {
             Err(String::from("Could not record single value"))
         }
+
+    }
+
+    fn counts_array_index(&self, value: i64) -> Result<i32, String> {
+
+        if (value < 0) {
+            Err(String::from("Histogram recorded values cannot be negative."))
+        } else {
+            Ok(0)
+        }
     }
 }
 
 #[test]
-fn it_works() {
+fn can_record_single_value() {
     let the_hist = SimpleHdrHistogram { something: "nothing" };
     let result = the_hist.record_single_value(99);
 
@@ -40,4 +57,29 @@ fn it_works() {
         Ok(_) => (),
         Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
     }
+}
+
+#[test]
+fn can_compute_counts_array_index() {
+    let the_hist = SimpleHdrHistogram { something: "nothing" };
+    let result = the_hist.counts_array_index(99);
+
+    match result {
+        Ok(_) => (),
+        Err(err) => panic!(format!("could not compute counts array index because error: {}", err))
+    }
+}
+
+#[test]
+fn can_get_bucket_index() {
+    let the_hist = SimpleHdrHistogram { something: "nothing" };
+    let result = the_hist.get_bucket_index(99);
+    assert_eq!(result, 0)
+}
+
+#[test]
+fn can_get_sub_bucket_index() {
+    let the_hist = SimpleHdrHistogram { something: "nothing" };
+    let result = the_hist.get_sub_bucket_index(99, 1);
+    assert_eq!(result, 0)
 }

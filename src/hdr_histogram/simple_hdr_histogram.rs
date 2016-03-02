@@ -1,3 +1,25 @@
+pub struct SimpleHdrHistogram {
+    pub leading_zeros_count_base: i32,
+    pub sub_bucket_mask: i64,
+    pub unit_magnitude: i32,
+    pub sub_bucket_count: i32,
+    pub sub_bucket_half_count: i32,
+    pub sub_bucket_half_count_magnitude: i32,
+}
+
+impl Default for SimpleHdrHistogram {
+    fn default () -> SimpleHdrHistogram {
+        SimpleHdrHistogram {
+            leading_zeros_count_base: 0,
+            sub_bucket_mask: 0,
+            unit_magnitude: 0,
+            sub_bucket_count: 0,
+            sub_bucket_half_count: 0,
+            sub_bucket_half_count_magnitude: 0,
+        }
+    }
+}
+
 pub trait Histogram {
 
     //TODO should be default impl of this trait
@@ -5,6 +27,7 @@ pub trait Histogram {
 
     //TODO should be default impl of this trait
     fn counts_array_index(&self, value: i64) -> Result<i32, String>;
+    fn counts_array_index_sub(&self, bucket_index: i32, sub_bucket_index: i32) -> i32;
 
     //TODO should be default impl of this trait
     fn get_bucket_index(&self, value: i64) -> i32;
@@ -14,21 +37,6 @@ pub trait Histogram {
 
 }
 
-pub struct SimpleHdrHistogram {
-    pub leading_zeros_count_base: i32,
-    pub sub_bucket_mask: i64,
-    pub unit_magnitude: i32,
-}
-
-impl Default for SimpleHdrHistogram {
-    fn default () -> SimpleHdrHistogram {
-        SimpleHdrHistogram {
-            leading_zeros_count_base: 0,
-            sub_bucket_mask: 0,
-            unit_magnitude: 0
-        }
-    }
-}
 
 impl Histogram for SimpleHdrHistogram {
 
@@ -43,24 +51,33 @@ impl Histogram for SimpleHdrHistogram {
     }
 
     fn record_single_value(&self, value: i64) -> Result<(), String> {
-
         let counts_index = self.counts_array_index(value);
-
         if true {
             Ok(())
         } else {
             Err(String::from("Could not record single value"))
         }
-
     }
 
     fn counts_array_index(&self, value: i64) -> Result<i32, String> {
-
         if (value < 0) {
             Err(String::from("Histogram recorded values cannot be negative."))
         } else {
-            Ok(0)
+            let bucket_index = self.get_bucket_index(value);
+            let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
+            let result = self.counts_array_index_sub(bucket_index, sub_bucket_index);
+            Ok(result)
         }
+    }
+
+    fn counts_array_index_sub(&self, bucket_index: i32, sub_bucket_index: i32) -> i32 {
+        assert!(sub_bucket_index < self.sub_bucket_count);
+        assert!(bucket_index == 0 || (sub_bucket_index >= self.sub_bucket_half_count));
+
+        let bucket_base_index = (bucket_index + 1) << self.sub_bucket_half_count_magnitude;
+        let offset_in_bucket = sub_bucket_index - self.sub_bucket_half_count;
+
+        bucket_base_index + offset_in_bucket
     }
 }
 

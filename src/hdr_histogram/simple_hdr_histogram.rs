@@ -64,14 +64,22 @@ impl HistogramBase for SimpleHdrHistogram {
 
     fn normalize_index(&self, index: i32, normalizing_index_offset: i32, array_length: i32) ->
 Result<i32, String> {
-        Ok(0)
-//        match normalizing_index_offset {
-//            0 => index,
-//            _ =>
-//                match {
-//
-//                }
-//        }
+
+        match normalizing_index_offset {
+            0 => Ok(index),
+            _ =>
+                if ((index > array_length) || (index < 0)) {
+                    Err(String::from("index out of covered range"))
+                } else {
+                    let mut normalized_index = index - normalizing_index_offset;
+                    if (normalized_index < 0) {
+                        normalized_index += array_length;
+                    } else if (normalized_index >= array_length) {
+                        normalized_index -=array_length;
+                    }
+                    Ok(normalized_index)
+                }
+        }
 
     }
 
@@ -94,15 +102,15 @@ Result<i32, String> {
 
         match self.counts_array_index(value) {
             Ok(counts_index) =>
-            match self.increment_count_at_index(counts_index) {
-                Ok(_) =>
-                if true {
-                    Ok(())
-                } else {
-                    Err(String::from("Could not record single value"))
+                match self.increment_count_at_index(counts_index) {
+                    Ok(_) =>
+                    if true {
+                        Ok(())
+                    } else {
+                        Err(String::from("Could not record single value"))
+                    },
+                    Err(err) => Err(String::from("Could not increment stuff"))
                 },
-                Err(err) => Err(String::from("Could not increment stuff"))
-            },
             Err(err) => Err(String::from("Could not get index"))
         }
 

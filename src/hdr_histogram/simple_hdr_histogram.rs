@@ -33,7 +33,8 @@ impl Default for SimpleHdrHistogram {
 impl Histogram for SimpleHdrHistogram {
 
     fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32 {
-        0
+        let sum = bucket_index + self.unit_magnitude;
+        sum.rotate_right(1)
     }
 
     fn get_bucket_index(&self, value: i64) -> i32 {

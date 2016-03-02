@@ -4,15 +4,15 @@
 
 */
 pub struct SimpleHdrHistogram {
-    pub leading_zeros_count_base: i32,
+    pub leading_zeros_count_base: usize,
     pub sub_bucket_mask: i64,
-    pub unit_magnitude: i32,
-    pub sub_bucket_count: i32,
-    pub sub_bucket_half_count: i32,
+    pub unit_magnitude: usize,
+    pub sub_bucket_count: usize,
+    pub sub_bucket_half_count: usize,
     pub sub_bucket_half_count_magnitude: i32,
     pub counts: Vec<u64>,
-    pub counts_array_length: i32,
-    pub normalizing_index_offset: i32,
+    pub counts_array_length: usize,
+    pub normalizing_index_offset: usize,
 }
 
 
@@ -44,30 +44,30 @@ pub trait HistogramBase {
 
 
     //TODO should be default impl of this trait
-    fn record_single_value(&self, value: i64) -> Result<(), String>;
+    fn record_single_value(&mut self, value: i64) -> Result<(), String>;
 
     //TODO should be default impl of this trait
-    fn counts_array_index(&self, value: i64) -> Result<i32, String>;
+    fn counts_array_index(&self, value: i64) -> Result<usize, String>;
 
     //TODO should be default impl of this trait
-    fn counts_array_index_sub(&self, bucket_index: i32, sub_bucket_index: i32) -> i32;
+    fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
 
     //TODO should be default impl of this trait
-    fn get_bucket_index(&self, value: i64) -> i32;
+    fn get_bucket_index(&self, value: i64) -> usize;
 
     //TODO should be default impl of this trait
-    fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32;
+    fn get_sub_bucket_index(&self, value: i64, bucket_index: usize) -> usize;
 
-    fn increment_count_at_index(&self, index: i32) -> Result<(), String>;
-    fn normalize_index(&self, index: i32, normalizing_index_offset: i32, array_length: i32) ->
-        Result<i32, String>;
+    fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
+    fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
+        Result<usize, String>;
 
 }
 
 impl HistogramBase for SimpleHdrHistogram {
 
-    fn normalize_index(&self, index: i32, normalizing_index_offset: i32, array_length: i32) ->
-Result<i32, String> {
+    fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
+Result<usize, String> {
 
         match normalizing_index_offset {
             0 => Ok(index),
@@ -75,7 +75,7 @@ Result<i32, String> {
                 if ((index > array_length) || (index < 0)) {
                     Err(String::from("index out of covered range"))
                 } else {
-                    let mut normalized_index = index - normalizing_index_offset;
+                    let mut normalized_index: usize = index - normalizing_index_offset;
                     if (normalized_index < 0) {
                         normalized_index += array_length;
                     } else if (normalized_index >= array_length) {
@@ -87,30 +87,31 @@ Result<i32, String> {
 
     }
 
-    fn increment_count_at_index(&self, index: i32) -> Result<(), String> {
+    fn increment_count_at_index(&mut self, index: usize) -> Result<(), String> {
         let normalized_index =
             self.normalize_index(index, self.normalizing_index_offset, self.counts_array_length);
         match normalized_index {
-            Ok(the_index) =>
-                self.counts[the_index] = self.counts[the_index] + 1;
-                Ok(()),
+            Ok(the_index) => {
+                self.counts[the_index] += 1;
+                Ok(())
+            }
             Err(err) =>
                 Err(err)
         }
     }
 
 
-    fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32 {
+    fn get_sub_bucket_index(&self, value: i64, bucket_index: usize) -> usize {
         let sum = bucket_index + self.unit_magnitude;
-        value.rotate_right(sum as u32) as i32
+        value.rotate_right(sum as u32) as usize
     }
 
-    fn get_bucket_index(&self, value: i64) -> i32 {
+    fn get_bucket_index(&self, value: i64) -> usize {
         let valueOrred = value | self.sub_bucket_mask;
-        self.leading_zeros_count_base - valueOrred.leading_zeros() as i32
+        self.leading_zeros_count_base - (valueOrred.leading_zeros() as usize)
     }
 
-    fn record_single_value(&self, value: i64) -> Result<(), String> {
+    fn record_single_value(&mut self, value: i64) -> Result<(), String> {
 
         match self.counts_array_index(value) {
             Ok(counts_index) =>
@@ -128,7 +129,7 @@ Result<i32, String> {
 
     }
 
-    fn counts_array_index(&self, value: i64) -> Result<i32, String> {
+    fn counts_array_index(&self, value: i64) -> Result<usize, String> {
         if value < 0 {
             Err(String::from("Histogram recorded values cannot be negative."))
         } else {
@@ -139,7 +140,7 @@ Result<i32, String> {
         }
     }
 
-    fn counts_array_index_sub(&self, bucket_index: i32, sub_bucket_index: i32) -> i32 {
+    fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize {
         assert!(sub_bucket_index < self.sub_bucket_count);
         assert!(bucket_index == 0 || (sub_bucket_index >= self.sub_bucket_half_count));
 
@@ -174,7 +175,7 @@ fn can_compute_counts_array_index() {
 
 #[test]
 fn can_get_bucket_index() {
-    let the_hist = SimpleHdrHistogram { ..Default::default() };
+    let the_hist = init_histo();
     let result = the_hist.get_bucket_index(99);
     assert_eq!(result, 0)
 }

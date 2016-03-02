@@ -1,3 +1,8 @@
+/*
+
+  This struct essentially encapsulates the "instance variables"
+
+*/
 pub struct SimpleHdrHistogram {
     pub leading_zeros_count_base: i32,
     pub sub_bucket_mask: i64,
@@ -5,8 +10,16 @@ pub struct SimpleHdrHistogram {
     pub sub_bucket_count: i32,
     pub sub_bucket_half_count: i32,
     pub sub_bucket_half_count_magnitude: i32,
+    pub counts: Vec<u64>,
 }
 
+
+/*
+
+  Implementing this trait (Default) for our struct gives us a nice way to
+  initialize an instance using default args instead of having to provide all of them
+
+ */
 impl Default for SimpleHdrHistogram {
     fn default () -> SimpleHdrHistogram {
         SimpleHdrHistogram {
@@ -16,17 +29,23 @@ impl Default for SimpleHdrHistogram {
             sub_bucket_count: 0,
             sub_bucket_half_count: 0,
             sub_bucket_half_count_magnitude: 0,
+            counts: Vec::new(),
         }
     }
 }
 
-pub trait Histogram {
+pub trait HistogramBase {
+
+    //FIXME this stuff could be mostly unsigned
+
 
     //TODO should be default impl of this trait
     fn record_single_value(&self, value: i64) -> Result<(), String>;
 
     //TODO should be default impl of this trait
     fn counts_array_index(&self, value: i64) -> Result<i32, String>;
+
+    //TODO should be default impl of this trait
     fn counts_array_index_sub(&self, bucket_index: i32, sub_bucket_index: i32) -> i32;
 
     //TODO should be default impl of this trait
@@ -35,10 +54,31 @@ pub trait Histogram {
     //TODO should be default impl of this trait
     fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32;
 
+    fn increment_count_at_index(&self, index: i32) -> Result<(), String>;
+    fn normalize_index(&self, index: i32, normalizing_index_offset: i32, array_length: i32) ->
+        Result<i32, String>;
+
 }
 
+impl HistogramBase for SimpleHdrHistogram {
 
-impl Histogram for SimpleHdrHistogram {
+    fn normalize_index(&self, index: i32, normalizing_index_offset: i32, array_length: i32) ->
+Result<i32, String> {
+        Ok(0)
+//        match normalizing_index_offset {
+//            0 => index,
+//            _ =>
+//                match {
+//
+//                }
+//        }
+
+    }
+
+    fn increment_count_at_index(&self, index: i32) -> Result<(), String> {
+        Ok(())
+    }
+
 
     fn get_sub_bucket_index(&self, value: i64, bucket_index: i32) -> i32 {
         let sum = bucket_index + self.unit_magnitude;
@@ -52,6 +92,9 @@ impl Histogram for SimpleHdrHistogram {
 
     fn record_single_value(&self, value: i64) -> Result<(), String> {
         let counts_index = self.counts_array_index(value);
+
+//        let something_which_might_error_out = self.increment_count_at_index(counts_index);
+
         if true {
             Ok(())
         } else {
@@ -60,7 +103,7 @@ impl Histogram for SimpleHdrHistogram {
     }
 
     fn counts_array_index(&self, value: i64) -> Result<i32, String> {
-        if (value < 0) {
+        if value < 0 {
             Err(String::from("Histogram recorded values cannot be negative."))
         } else {
             let bucket_index = self.get_bucket_index(value);

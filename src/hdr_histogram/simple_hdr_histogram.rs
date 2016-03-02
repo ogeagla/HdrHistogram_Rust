@@ -91,15 +91,21 @@ Result<i32, String> {
     }
 
     fn record_single_value(&self, value: i64) -> Result<(), String> {
-        let counts_index = self.counts_array_index(value);
 
-//        let something_which_might_error_out = self.increment_count_at_index(counts_index);
-
-        if true {
-            Ok(())
-        } else {
-            Err(String::from("Could not record single value"))
+        match self.counts_array_index(value) {
+            Ok(counts_index) =>
+            match self.increment_count_at_index(counts_index) {
+                Ok(_) =>
+                if true {
+                    Ok(())
+                } else {
+                    Err(String::from("Could not record single value"))
+                },
+                Err(err) => Err(String::from("Could not increment stuff"))
+            },
+            Err(err) => Err(String::from("Could not get index"))
         }
+
     }
 
     fn counts_array_index(&self, value: i64) -> Result<i32, String> {

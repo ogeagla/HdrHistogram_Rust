@@ -1,3 +1,5 @@
+use std::cmp;
+
 /*
 
   This struct essentially encapsulates the "instance variables"
@@ -63,17 +65,35 @@ pub trait HistogramBase {
     fn update_min_and_max(&mut self, value: u64);
     fn update_max_value(&mut self, value: u64);
     fn update_min_non_zero_value(&mut self, value: u64);
+    fn get_count_at_value(&mut self, value: u64) -> Result<u64, String>;
     // end TODO
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
     fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
         Result<usize, String>;
     fn increment_total_count(&mut self);
+    fn get_count_at_index(&mut self, index: usize) -> Result<u64, String>;
 
 
 }
 
 impl HistogramBase for SimpleHdrHistogram {
+
+    fn get_count_at_index(&mut self, index: usize) -> Result<u64, String> {
+        let normalized_index =
+            self.normalize_index(index, self.normalizing_index_offset, self.counts_array_length);
+        match normalized_index {
+            Ok(the_index) =>
+                Ok(self.counts[the_index]),
+            Err(err) =>
+                Err(err)
+        }
+    }
+
+    fn get_count_at_value(&mut self, value: u64) -> Result<u64, String> {
+        let index = cmp::min(cmp::max(0, self.counts_array_index(value)), self.counts_array_length - 1);
+        self.get_count_at_index(index)
+    }
 
     fn increment_total_count(&mut self) {
         self.total_count += 1;
@@ -102,7 +122,7 @@ impl HistogramBase for SimpleHdrHistogram {
     }
 
     fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
-Result<usize, String> {
+        Result<usize, String> {
         match normalizing_index_offset {
             0 => Ok(index),
             _ =>

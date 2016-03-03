@@ -78,7 +78,7 @@ impl HistogramBase for SimpleHdrHistogram {
     }
 
     fn update_max_value(&mut self, value: u64) {
-        let mut internal_value = value | self.unit_magnitude_mask;
+        let internal_value = value | self.unit_magnitude_mask;
         self.max_value = internal_value;
     }
 
@@ -94,7 +94,7 @@ impl HistogramBase for SimpleHdrHistogram {
         if value > self.max_value {
             self.update_max_value(value);
         }
-        if ((value < self.min_non_zero_value) && (value != 0)) {
+        if value < self.min_non_zero_value && value != 0 {
             self.update_min_non_zero_value(value);
         }
     }
@@ -104,13 +104,11 @@ Result<usize, String> {
         match normalizing_index_offset {
             0 => Ok(index),
             _ =>
-                if ((index > array_length) || (index < 0)) {
+                if index > array_length {
                     Err(String::from("index out of covered range"))
                 } else {
                     let mut normalized_index: usize = index - normalizing_index_offset;
-                    if (normalized_index < 0) {
-                        normalized_index += array_length;
-                    } else if (normalized_index >= array_length) {
+                    if normalized_index >= array_length {
                         normalized_index -=array_length;
                     }
                     Ok(normalized_index)
@@ -137,8 +135,8 @@ Result<usize, String> {
     }
 
     fn get_bucket_index(&self, value: u64) -> usize {
-        let valueOrred = value | self.sub_bucket_mask;
-        self.leading_zeros_count_base - (valueOrred.leading_zeros() as usize)
+        let value_orred = value | self.sub_bucket_mask;
+        self.leading_zeros_count_base - (value_orred.leading_zeros() as usize)
     }
 
     fn record_single_value(&mut self, value: u64) -> Result<(), String> {
@@ -158,14 +156,10 @@ Result<usize, String> {
     }
 
     fn counts_array_index(&self, value: u64) -> Result<usize, String> {
-        if value < 0 {
-            Err(String::from("Histogram recorded values cannot be negative."))
-        } else {
-            let bucket_index = self.get_bucket_index(value);
-            let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
-            let result = self.counts_array_index_sub(bucket_index, sub_bucket_index);
-            Ok(result)
-        }
+        let bucket_index = self.get_bucket_index(value);
+        let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
+        let result = self.counts_array_index_sub(bucket_index, sub_bucket_index);
+        Ok(result)
     }
 
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize {
@@ -192,7 +186,7 @@ fn can_record_single_value() {
 
 #[test]
 fn can_compute_counts_array_index() {
-    let mut the_hist = init_histo(1, 1000, 5);
+    let the_hist = init_histo(1, 1000, 5);
     let result = the_hist.counts_array_index(99);
 
     match result {
@@ -203,14 +197,14 @@ fn can_compute_counts_array_index() {
 
 #[test]
 fn can_get_bucket_index() {
-    let mut the_hist = init_histo(1, 1000, 5);
+    let the_hist = init_histo(1, 1000, 5);
     let result = the_hist.get_bucket_index(99);
     assert_eq!(result, 0)
 }
 
 #[test]
 fn can_get_sub_bucket_index() {
-    let mut the_hist = init_histo(1, 1000, 5);
+    let the_hist = init_histo(1, 1000, 5);
     let result = the_hist.get_sub_bucket_index(99, 1);
     assert_eq!(result, 0)
 }
@@ -269,7 +263,7 @@ fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude:
     let mut buckets_needed: usize = 1;
 
     while smallest_untrackable_value <= value {
-        if (smallest_untrackable_value > u64::max_value() / 2) {
+        if smallest_untrackable_value > u64::max_value() / 2 {
             return buckets_needed + 1;
         }
 

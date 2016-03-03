@@ -14,6 +14,9 @@ pub struct SimpleHdrHistogram {
     pub counts: Vec<u64>,
     pub counts_array_length: usize,
     pub normalizing_index_offset: usize,
+    pub max_value: u64,
+    pub min_non_zero_value: u64,
+    pub unit_magnitude_mask: u64,
 }
 
 
@@ -35,6 +38,9 @@ impl Default for SimpleHdrHistogram {
             counts: Vec::new(),
             counts_array_length: 0,
             normalizing_index_offset: 0,
+            max_value: 0,
+            min_non_zero_value: u64::max_value(),
+            unit_magnitude_mask: 0,
         }
     }
 }
@@ -44,32 +50,50 @@ pub trait HistogramBase {
     //FIXME this stuff could be mostly unsigned
 
 
-    //TODO should be default impl of this trait
+    //TODO this block should be default impl of this trait
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
-
-    //TODO should be default impl of this trait
     fn counts_array_index(&self, value: u64) -> Result<usize, String>;
-
-    //TODO should be default impl of this trait
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
-
-    //TODO should be default impl of this trait
     fn get_bucket_index(&self, value: u64) -> usize;
-
-    //TODO should be default impl of this trait
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize;
+    fn update_min_and_max(&mut self, value: u64);
+    fn update_max_value(&mut self, value: u64);
+    fn update_min_non_zero_value(&mut self, value: u64);
+    // end TODO
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
     fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
         Result<usize, String>;
 
+
 }
 
 impl HistogramBase for SimpleHdrHistogram {
 
+    fn update_max_value(&mut self, value: u64) {
+        let mut internal_value = value | self.unit_magnitude_mask;
+        self.max_value = internal_value;
+    }
+
+    fn update_min_non_zero_value(&mut self, value: u64) {
+        if value <= self.unit_magnitude_mask {
+            return
+        }
+        let internal_value = value & !self.unit_magnitude_mask;
+        self.min_non_zero_value = internal_value;
+    }
+
+    fn update_min_and_max(&mut self, value: u64) {
+        if value > self.max_value {
+            self.update_max_value(value);
+        }
+        if ((value < self.min_non_zero_value) && (value != 0)) {
+            self.update_min_non_zero_value(value);
+        }
+    }
+
     fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
 Result<usize, String> {
-
         match normalizing_index_offset {
             0 => Ok(index),
             _ =>
@@ -85,7 +109,6 @@ Result<usize, String> {
                     Ok(normalized_index)
                 }
         }
-
     }
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String> {
@@ -114,16 +137,16 @@ Result<usize, String> {
     fn record_single_value(&mut self, value: u64) -> Result<(), String> {
 
         match self.counts_array_index(value) {
-            Ok(counts_index) =>
+            Ok(counts_index) => {
                 match self.increment_count_at_index(counts_index) {
-                    Ok(_) =>
-                        if true {
-                            Ok(())
-                        } else {
-                            Err(String::from("Could not record single value"))
-                        },
-                    Err(err) => Err(String::from("Could not increment stuff"))
-                },
+                    Ok(_) => {
+                        self.update_min_and_max(value);
+                        //incrementTotalCount()
+
+                        Err(String::from("Could not record single value"))
+                    }
+                    Err(err) => { Err(String::from("Could not increment stuff")) }
+                }}
             Err(err) => Err(String::from("Could not get index"))
         }
 

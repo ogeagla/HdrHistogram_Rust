@@ -58,6 +58,8 @@ pub trait HistogramBase {
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
     fn get_bucket_index(&self, value: u64) -> usize;
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize;
+    fn get_count(&self) -> u64;
+    fn get_max(&self) -> u64;
     fn update_min_and_max(&mut self, value: u64);
     fn update_max_value(&mut self, value: u64);
     fn update_min_non_zero_value(&mut self, value: u64);
@@ -153,6 +155,14 @@ Result<usize, String> {
             }
     }
 
+    fn get_max(&self) -> u64 {
+        self.max_value
+    }
+
+    fn get_count(&self) -> u64 {
+        self.total_count
+    }
+
     fn counts_array_index(&self, value: u64) -> usize {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
@@ -168,6 +178,32 @@ Result<usize, String> {
 
         bucket_base_index + offset_in_bucket
     }
+}
+
+#[test]
+fn can_get_count_after_record() {
+    let mut the_hist = init_histo(1, 100000, 3);
+    let result = the_hist.record_single_value(5000);
+    match result {
+        Ok(_) => (),
+        Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
+    }
+
+    let count = the_hist.get_count();
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn can_get_max_after_record() {
+    let mut the_hist = init_histo(1, 100000, 3);
+    let result = the_hist.record_single_value(5000);
+    match result {
+        Ok(_) => (),
+        Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
+    }
+
+    let max = the_hist.get_max();
+    assert_eq!(max, 5000);
 }
 
 #[test]

@@ -17,6 +17,7 @@ pub struct SimpleHdrHistogram {
     pub max_value: u64,
     pub min_non_zero_value: u64,
     pub unit_magnitude_mask: u64,
+    pub total_count: u64,
 }
 
 
@@ -41,6 +42,7 @@ impl Default for SimpleHdrHistogram {
             max_value: 0,
             min_non_zero_value: u64::max_value(),
             unit_magnitude_mask: 0,
+            total_count: 0,
         }
     }
 }
@@ -64,11 +66,16 @@ pub trait HistogramBase {
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
     fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
         Result<usize, String>;
+    fn increment_total_count(&mut self);
 
 
 }
 
 impl HistogramBase for SimpleHdrHistogram {
+
+    fn increment_total_count(&mut self) {
+        self.total_count += 1;
+    }
 
     fn update_max_value(&mut self, value: u64) {
         let mut internal_value = value | self.unit_magnitude_mask;
@@ -135,21 +142,19 @@ Result<usize, String> {
     }
 
     fn record_single_value(&mut self, value: u64) -> Result<(), String> {
-
         match self.counts_array_index(value) {
             Ok(counts_index) => {
                 match self.increment_count_at_index(counts_index) {
                     Ok(_) => {
                         self.update_min_and_max(value);
-                        //incrementTotalCount()
-
-                        Err(String::from("Could not record single value"))
+                        self.increment_total_count();
+                        Ok(())
                     }
-                    Err(err) => { Err(String::from("Could not increment stuff")) }
+                    Err(err) => {
+                        Err(String::from(format!("Could not increment count at index due to: {}", err))) }
                 }}
-            Err(err) => Err(String::from("Could not get index"))
+            Err(err) => Err(String::from(format!("Could not get index due to: {}", err)))
         }
-
     }
 
     fn counts_array_index(&self, value: u64) -> Result<usize, String> {

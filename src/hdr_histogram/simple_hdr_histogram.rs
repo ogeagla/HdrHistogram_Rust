@@ -130,8 +130,8 @@ Result<usize, String> {
     }
 
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize {
-        let sum = bucket_index + self.unit_magnitude as usize;
-        value.rotate_right(sum as u32) as usize
+        let sum = bucket_index as u32 + self.unit_magnitude;
+        value.rotate_right(sum) as usize
     }
 
     fn get_bucket_index(&self, value: u64) -> usize {
@@ -159,6 +159,7 @@ Result<usize, String> {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
         let result = self.counts_array_index_sub(bucket_index, sub_bucket_index);
+        // TODO is there any error case to represent?
         Ok(result)
     }
 
@@ -186,27 +187,27 @@ fn can_record_single_value() {
 
 #[test]
 fn can_compute_counts_array_index() {
-    let the_hist = init_histo(1, 1000, 5);
-    let result = the_hist.counts_array_index(99);
+    let the_hist = init_histo(1, 100000, 3);
+    let result = the_hist.counts_array_index(5000);
 
     match result {
-        Ok(_) => (),
+        Ok(index) => assert_eq!(index, 3298),
         Err(err) => panic!(format!("could not compute counts array index because error: {}", err))
     }
 }
 
 #[test]
 fn can_get_bucket_index() {
-    let the_hist = init_histo(1, 1000, 5);
-    let result = the_hist.get_bucket_index(99);
-    assert_eq!(result, 0)
+    let the_hist = init_histo(1, 100000, 3);
+    let result = the_hist.get_bucket_index(5000);
+    assert_eq!(result, 2)
 }
 
 #[test]
 fn can_get_sub_bucket_index() {
-    let the_hist = init_histo(1, 1000, 5);
-    let result = the_hist.get_sub_bucket_index(99, 1);
-    assert_eq!(result, 0)
+    let the_hist = init_histo(1, 100000, 3);
+    let result = the_hist.get_sub_bucket_index(5000, 2);
+    assert_eq!(result, 1250)
 }
 
 /// lowest_discernible_value: must be >= 1
@@ -258,7 +259,7 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
 
 fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude: u32) -> usize {
 
-    // is this cast ok?
+    // TODO is this cast ok?
     let mut smallest_untrackable_value: u64 = sub_bucket_count.rotate_left(unit_magnitude) as u64;
     let mut buckets_needed: usize = 1;
 

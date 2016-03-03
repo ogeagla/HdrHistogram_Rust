@@ -54,7 +54,7 @@ pub trait HistogramBase {
 
     //TODO this block should be default impl of this trait
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
-    fn counts_array_index(&self, value: u64) -> Result<usize, String>;
+    fn counts_array_index(&self, value: u64) -> usize;
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
     fn get_bucket_index(&self, value: u64) -> usize;
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize;
@@ -140,27 +140,23 @@ Result<usize, String> {
     }
 
     fn record_single_value(&mut self, value: u64) -> Result<(), String> {
-        match self.counts_array_index(value) {
-            Ok(counts_index) => {
-                match self.increment_count_at_index(counts_index) {
-                    Ok(_) => {
-                        self.update_min_and_max(value);
-                        self.increment_total_count();
-                        Ok(())
-                    }
-                    Err(err) => {
-                        Err(String::from(format!("Could not increment count at index due to: {}", err))) }
-                }}
-            Err(err) => Err(String::from(format!("Could not get index due to: {}", err)))
-        }
+        let counts_index = self.counts_array_index(value);
+            match self.increment_count_at_index(counts_index) {
+                Ok(_) => {
+                    self.update_min_and_max(value);
+                    self.increment_total_count();
+                    Ok(())
+                }
+                Err(err) => {
+                    Err(String::from(format!("Could not increment count at index due to: {}", err)))
+                }
+            }
     }
 
-    fn counts_array_index(&self, value: u64) -> Result<usize, String> {
+    fn counts_array_index(&self, value: u64) -> usize {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
-        let result = self.counts_array_index_sub(bucket_index, sub_bucket_index);
-        // TODO is there any error case to represent?
-        Ok(result)
+        return self.counts_array_index_sub(bucket_index, sub_bucket_index);
     }
 
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize {
@@ -176,8 +172,8 @@ Result<usize, String> {
 
 #[test]
 fn can_record_single_value() {
-    let mut the_hist = SimpleHdrHistogram { ..Default::default() };
-    let result = the_hist.record_single_value(99);
+    let mut the_hist = init_histo(1, 100000, 3);
+    let result = the_hist.record_single_value(5000);
 
     match result {
         Ok(_) => (),
@@ -190,10 +186,7 @@ fn can_compute_counts_array_index() {
     let the_hist = init_histo(1, 100000, 3);
     let result = the_hist.counts_array_index(5000);
 
-    match result {
-        Ok(index) => assert_eq!(index, 3298),
-        Err(err) => panic!(format!("could not compute counts array index because error: {}", err))
-    }
+    assert_eq!(result, 3298);
 }
 
 #[test]
@@ -248,7 +241,7 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     hist.sub_bucket_count = sub_bucket_count;
     hist.sub_bucket_half_count = sub_bucket_half_count;
     hist.sub_bucket_half_count_magnitude = sub_bucket_half_count_magnitude;
-    hist.counts = Vec::with_capacity(counts_arr_len);
+    hist.counts = vec![10; counts_arr_len];
     hist.counts_array_length = counts_arr_len;
     hist.normalizing_index_offset = 0_usize; // 0 for normal Histogram ctor in Java impl
 

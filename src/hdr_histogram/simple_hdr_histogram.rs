@@ -1,5 +1,51 @@
 use std::cmp;
 
+#[derive(Debug)]
+pub struct RecordedValueIterator {
+    pub visitedIndex: u32,
+}
+
+pub struct HistogramIterationValue {
+    pub value_iterated_to: u64,
+    pub value_iterated_from: u64,
+    pub count_at_value_iterated_to: u64,
+    pub count_added_in_this_iteration_step: u64,
+    pub total_count_to_this_value: u64,
+    pub total_value_to_this_value: u64,
+    pub percentile: f64,
+    pub percentile_level_iterated_to: f64,
+    pub integer_to_double_value_conversion_ratio: f64,
+}
+
+impl Default for HistogramIterationValue {
+    fn default() -> HistogramIterationValue {
+        HistogramIterationValue {
+            value_iterated_to: 0,
+            value_iterated_from: 0,
+            count_at_value_iterated_to: 0,
+            count_added_in_this_iteration_step: 0,
+            total_count_to_this_value: 0,
+            total_value_to_this_value: 0,
+            percentile: 0.0,
+            percentile_level_iterated_to: 0.0,
+            integer_to_double_value_conversion_ratio: 0.0,
+        }
+    }
+}
+
+impl HistogramIterationValue {
+    fn reset(mut self) {
+        self = HistogramIterationValue {..Default::default()};
+    }
+}
+
+impl Iterator for RecordedValueIterator {
+    type Item = HistogramIterationValue;
+    fn next(&mut self) -> Option<Self::Item> {
+        None
+    }
+}
+
 ///
 /// This module contains helpers, but should be extracted into the project top-level
 /// min and max impls are gross, but they work
@@ -37,7 +83,7 @@ mod helpers {
     }
 }
 ///
-/// This struct essentially encapsulates the "instance variables"
+/// This struct essentially encapsulates the "instance variables" of the histogram
 ///
 #[derive(Debug)]
 pub struct SimpleHdrHistogram {
@@ -61,7 +107,7 @@ pub struct SimpleHdrHistogram {
 /// initialize an instance using default args instead of having to provide all of them
 ///
 impl Default for SimpleHdrHistogram {
-    fn default () -> SimpleHdrHistogram {
+    fn default() -> SimpleHdrHistogram {
         SimpleHdrHistogram {
             leading_zeros_count_base: 0,
             sub_bucket_mask: 0,
@@ -107,6 +153,7 @@ pub trait HistogramBase {
     fn highest_equivalent_value(&self, value: u64) -> u64;
     fn next_non_equivalent_value(&self, value: u64) -> u64;
     fn size_of_equivalent_value_range(&self, value: u64) -> u64;
+    fn get_mean(&self) -> f64;
     // end TODO
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
@@ -118,6 +165,14 @@ pub trait HistogramBase {
 }
 
 impl HistogramBase for SimpleHdrHistogram {
+
+    fn get_mean(&self) -> f64 {
+
+        if self.get_count() == 0 { 0.0 } else {
+            //TODO stuff
+            0.0
+        }
+    }
 
     fn next_non_equivalent_value(&self, value: u64) -> u64 {
         self.lowest_equivalent_value(value) + self.size_of_equivalent_value_range(value)

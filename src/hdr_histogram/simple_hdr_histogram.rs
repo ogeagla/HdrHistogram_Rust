@@ -1,16 +1,19 @@
 use std::cmp;
 
+
+///
+///  This module contains helpers, but should be extracted into the project top-level
+///
 mod helpers {
     pub fn min_f64s() {
 
     }
 }
 
-/*
 
-  This struct essentially encapsulates the "instance variables"
-
-*/
+///
+///  This struct essentially encapsulates the "instance variables"
+///
 #[derive(Debug)]
 pub struct SimpleHdrHistogram {
     pub leading_zeros_count_base: usize,
@@ -29,12 +32,11 @@ pub struct SimpleHdrHistogram {
 }
 
 
-/*
 
-  Implementing this trait (Default) for our struct gives us a nice way to
-  initialize an instance using default args instead of having to provide all of them
-
- */
+///
+///  Implementing this trait (Default) for our struct gives us a nice way to
+///  initialize an instance using default args instead of having to provide all of them
+///
 impl Default for SimpleHdrHistogram {
     fn default () -> SimpleHdrHistogram {
         SimpleHdrHistogram {

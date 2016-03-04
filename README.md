@@ -15,5 +15,10 @@ cargo build
 cargo test
 ```
 
+## How to build documentation
+```
+cargo doc
+```
+
 ## Modules
  - `simple_hdr_histogram` - Base HDR Histogram implementation

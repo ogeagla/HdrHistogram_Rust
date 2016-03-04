@@ -109,6 +109,8 @@ pub trait HistogramBase {
     fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64;
     fn lowest_equivalent_value(&self, value: u64) -> u64;
     fn highest_equivalent_value(&self, value: u64) -> u64;
+    fn next_non_equivalent_value(&self, value: u64) -> u64;
+    fn size_of_equivalent_value_range(&self, value: u64) -> u64;
     // end TODO
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
@@ -121,14 +123,28 @@ pub trait HistogramBase {
 
 impl HistogramBase for SimpleHdrHistogram {
 
-    fn highest_equivalent_value(&self, value: u64) -> u64 {
-        //TODO implement this
+    fn next_non_equivalent_value(&self, value: u64) -> u64 {
+        self.lowest_equivalent_value(value) + self.size_of_equivalent_value_range(value);
+        //TODO
         1
     }
 
+    fn size_of_equivalent_value_range(&self, value: u64) -> u64 {
+        let bucket_index = self.get_bucket_index(value);
+        let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
+        let distance_to_next_value = 1; // <--TODO
+        distance_to_next_value
+    }
+
+    fn highest_equivalent_value(&self, value: u64) -> u64 {
+        self.next_non_equivalent_value(value) - 1
+    }
+
     fn lowest_equivalent_value(&self, value: u64) -> u64 {
-        //TODO implement this
-        1
+        let bucket_index = self.get_bucket_index(value);
+        let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
+        let this_value_base_level = self.value_from_index_sub(bucket_index, sub_bucket_index);
+        this_value_base_level
     }
 
     fn value_from_index(&self, index: usize) -> u64 {

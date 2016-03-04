@@ -14,7 +14,6 @@ mod helpers {
             false => second
         }
     }
-
     ///
     /// return whichever double is bigger
     ///
@@ -24,14 +23,12 @@ mod helpers {
             false => second
         }
     }
-
     #[test]
     pub fn min_64_works() {
         assert_eq!(min_f64(1.0, 2.0), 1.0);
         assert_eq!(min_f64(2.0, 2.0), 2.0);
         assert_eq!(min_f64(2.0, 1.0), 1.0);
     }
-
     #[test]
     pub fn max_64_works() {
         assert_eq!(max_f64(1.0, 2.0), 2.0);
@@ -39,7 +36,6 @@ mod helpers {
         assert_eq!(max_f64(2.0, 1.0), 2.0);
     }
 }
-
 ///
 /// This struct essentially encapsulates the "instance variables"
 ///
@@ -91,7 +87,7 @@ pub trait HistogramBase {
     //TODO this block should be default impl of this trait
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
     fn counts_array_index(&self, value: u64) -> usize;
-    //in the Java impl, the functions above/below have same name but are overloaded, which
+    // in the Java impl, the functions above/below have same name but are overloaded, which
     //  Rust does not allow, thus the name change
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
     fn get_bucket_index(&self, value: u64) -> usize;
@@ -104,7 +100,7 @@ pub trait HistogramBase {
     fn get_count_at_value(&mut self, value: u64) -> Result<u64, String>;
     fn get_value_at_percentile(&mut self, percentile: f64) -> u64;
     fn value_from_index(&self, index: usize) -> u64;
-    //in the Java impl, the functions above/below have same name but are overloaded, which
+    // in the Java impl, the functions above/below have same name but are overloaded, which
     //  Rust does not allow, thus the name change
     fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64;
     fn lowest_equivalent_value(&self, value: u64) -> u64;
@@ -124,15 +120,13 @@ pub trait HistogramBase {
 impl HistogramBase for SimpleHdrHistogram {
 
     fn next_non_equivalent_value(&self, value: u64) -> u64 {
-        self.lowest_equivalent_value(value) + self.size_of_equivalent_value_range(value);
-        //TODO
-        1
+        self.lowest_equivalent_value(value) + self.size_of_equivalent_value_range(value)
     }
 
     fn size_of_equivalent_value_range(&self, value: u64) -> u64 {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
-        let distance_to_next_value = 1; // <--TODO
+        let distance_to_next_value = 1; // <--TODO, I skipped the bit arithmetic here for now
         distance_to_next_value
     }
 
@@ -148,13 +142,17 @@ impl HistogramBase for SimpleHdrHistogram {
     }
 
     fn value_from_index(&self, index: usize) -> u64 {
-        //TODO implement this
-        1
+        let mut bucket_index = (index as u32 >> self.sub_bucket_half_count_magnitude) - 1;
+        let mut sub_bucket_index = (index as u32 & (self.sub_bucket_half_count as u32 - 1)) + self.sub_bucket_half_count as u32;
+        if bucket_index < 0 {
+            sub_bucket_index -= self.sub_bucket_half_count as u32;
+            bucket_index = 0;
+        }
+        self.value_from_index_sub(bucket_index as usize, sub_bucket_index as usize)
     }
 
     fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64 {
-        //TODO implement this
-        1
+        (sub_bucket_index as u64) << (bucket_index as u32 + self.unit_magnitude)
     }
 
     fn get_value_at_percentile(&mut self, percentile: f64) -> u64 {

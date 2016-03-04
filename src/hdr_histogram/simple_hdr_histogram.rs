@@ -1,10 +1,6 @@
 use std::cmp;
 
 #[derive(Debug)]
-pub struct RecordedValueIterator {
-    pub visitedIndex: u32,
-}
-
 pub struct HistogramIterationValue {
     pub value_iterated_to: u64,
     pub value_iterated_from: u64,
@@ -35,13 +31,21 @@ impl Default for HistogramIterationValue {
 
 impl HistogramIterationValue {
     fn reset(mut self) {
-        self = HistogramIterationValue {..Default::default()};
+        self = HistogramIterationValue { ..Default::default() };
     }
+}
+
+
+#[derive(Debug)]
+pub struct RecordedValueIterator {
+    //TODO
+    pub visitedIndex: u32,
 }
 
 impl Iterator for RecordedValueIterator {
     type Item = HistogramIterationValue;
     fn next(&mut self) -> Option<Self::Item> {
+        //TODO
         None
     }
 }

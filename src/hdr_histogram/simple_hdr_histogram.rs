@@ -194,10 +194,35 @@ impl HistogramBase for SimpleHdrHistogram {
         assert!(bucket_index == 0 || (sub_bucket_index >= self.sub_bucket_half_count));
 
         let bucket_base_index = (bucket_index + 1) << self.sub_bucket_half_count_magnitude;
+        println!("bi: {}, sbi: {}, bbi: {}", bucket_index, sub_bucket_index, bucket_base_index);
         let offset_in_bucket = sub_bucket_index - self.sub_bucket_half_count;
 
         bucket_base_index + offset_in_bucket
     }
+}
+
+#[test]
+fn count_at_value_on_empty() {
+    let mut the_hist = init_histo(1, 100000, 3);
+
+    assert_eq!(the_hist.get_count_at_value(1).unwrap(), 0);
+//    assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 0);
+//    assert_eq!(the_hist.get_count_at_value(100000).unwrap(), 0);
+}
+
+#[test]
+fn count_at_value_after_record() {
+    let mut the_hist = init_histo(1, 100000, 3);
+
+    let result = the_hist.record_single_value(5000);
+    match result {
+        Ok(_) => (),
+        Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
+    }
+
+    assert_eq!(the_hist.get_count_at_value(1).unwrap(), 0);
+    assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 1);
+    assert_eq!(the_hist.get_count_at_value(100000).unwrap(), 0);
 }
 
 #[test]
@@ -235,6 +260,15 @@ fn can_record_single_value() {
         Ok(_) => (),
         Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
     }
+}
+
+#[test]
+fn can_compute_indexes_for_smallest_value() {
+    let the_hist = init_histo(1, 100000, 3);
+    let value = 1;
+    assert_eq!(the_hist.get_bucket_index(value), 0);
+    assert_eq!(the_hist.get_sub_bucket_index(value, 0), 1);
+    assert_eq!(the_hist.counts_array_index(value), 1);
 }
 
 #[test]
@@ -297,7 +331,7 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     hist.sub_bucket_count = sub_bucket_count;
     hist.sub_bucket_half_count = sub_bucket_half_count;
     hist.sub_bucket_half_count_magnitude = sub_bucket_half_count_magnitude;
-    hist.counts = vec![10; counts_arr_len];
+    hist.counts = vec![0; counts_arr_len];
     hist.counts_array_length = counts_arr_len;
     hist.normalizing_index_offset = 0_usize; // 0 for normal Histogram ctor in Java impl
 

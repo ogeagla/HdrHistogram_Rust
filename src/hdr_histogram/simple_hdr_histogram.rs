@@ -126,8 +126,14 @@ impl HistogramBase for SimpleHdrHistogram {
     fn size_of_equivalent_value_range(&self, value: u64) -> u64 {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
-        let distance_to_next_value = 1; // <--TODO, I skipped the bit arithmetic here for now
-        distance_to_next_value
+        let distance_to_next_value =
+            (1 <<
+                (self.unit_magnitude +
+                if (sub_bucket_index as u32 >= self.sub_bucket_count as u32)
+                    {bucket_index as u32 + 1}
+                else
+                    {bucket_index as u32}));
+        distance_to_next_value as u64
     }
 
     fn highest_equivalent_value(&self, value: u64) -> u64 {

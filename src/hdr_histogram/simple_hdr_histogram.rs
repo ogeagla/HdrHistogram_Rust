@@ -1,5 +1,11 @@
 use std::cmp;
 
+mod helpers {
+    pub fn min_f64s() {
+
+    }
+}
+
 /*
 
   This struct essentially encapsulates the "instance variables"
@@ -66,6 +72,7 @@ pub trait HistogramBase {
     fn update_max_value(&mut self, value: u64);
     fn update_min_non_zero_value(&mut self, value: u64);
     fn get_count_at_value(&mut self, value: u64) -> Result<u64, String>;
+    fn get_value_at_percentile(&self, percentile: f64) -> u64;
     // end TODO
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
@@ -78,6 +85,15 @@ pub trait HistogramBase {
 }
 
 impl HistogramBase for SimpleHdrHistogram {
+
+    fn get_value_at_percentile(&self, percentile: f64) -> u64 {
+//        let requested_percentile = cmp::min(percentile, 100.0);
+//        let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count()) + 0.5) as u64;
+//        count_at_percentile = cmp::max(count_at_percentile, 1);
+//        let mut total_to_current_index: u64 = 0;
+        helpers::min_f64s();
+        1
+    }
 
     fn get_count_at_index(&mut self, index: usize) -> Result<u64, String> {
         let normalized_index =

@@ -1,18 +1,47 @@
 use std::cmp;
 
-
 ///
-///  This module contains helpers, but should be extracted into the project top-level
+/// This module contains helpers, but should be extracted into the project top-level
+/// min and max impls are gross, but they work
 ///
 mod helpers {
-    pub fn min_f64s() {
+    ///
+    /// return whichever double is smaller
+    ///
+    pub fn min_f64(first: f64, second: f64) -> f64 {
+        match first < second {
+            true => first,
+            false => second
+        }
+    }
 
+    ///
+    /// return whichever double is bigger
+    ///
+    pub fn max_f64(first: f64, second: f64) -> f64 {
+        match first > second {
+            true => first,
+            false => second
+        }
+    }
+
+    #[test]
+    pub fn min_64_works() {
+        assert_eq!(min_f64(1.0, 2.0), 1.0);
+        assert_eq!(min_f64(2.0, 2.0), 2.0);
+        assert_eq!(min_f64(2.0, 1.0), 1.0);
+    }
+
+    #[test]
+    pub fn max_64_works() {
+        assert_eq!(max_f64(1.0, 2.0), 2.0);
+        assert_eq!(max_f64(2.0, 2.0), 2.0);
+        assert_eq!(max_f64(2.0, 1.0), 2.0);
     }
 }
 
-
 ///
-///  This struct essentially encapsulates the "instance variables"
+/// This struct essentially encapsulates the "instance variables"
 ///
 #[derive(Debug)]
 pub struct SimpleHdrHistogram {
@@ -31,11 +60,9 @@ pub struct SimpleHdrHistogram {
     pub total_count: u64,
 }
 
-
-
 ///
-///  Implementing this trait (Default) for our struct gives us a nice way to
-///  initialize an instance using default args instead of having to provide all of them
+/// Implementing this trait (Default) for our struct gives us a nice way to
+/// initialize an instance using default args instead of having to provide all of them
 ///
 impl Default for SimpleHdrHistogram {
     fn default () -> SimpleHdrHistogram {
@@ -61,7 +88,6 @@ pub trait HistogramBase {
 
     //FIXME this stuff could be mostly unsigned
 
-
     //TODO this block should be default impl of this trait
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
     fn counts_array_index(&self, value: u64) -> usize;
@@ -83,7 +109,6 @@ pub trait HistogramBase {
     fn increment_total_count(&mut self);
     fn get_count_at_index(&mut self, index: usize) -> Result<u64, String>;
 
-
 }
 
 impl HistogramBase for SimpleHdrHistogram {
@@ -93,7 +118,7 @@ impl HistogramBase for SimpleHdrHistogram {
 //        let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count()) + 0.5) as u64;
 //        count_at_percentile = cmp::max(count_at_percentile, 1);
 //        let mut total_to_current_index: u64 = 0;
-        helpers::min_f64s();
+        helpers::min_f64(0.0, 0.0);
         1
     }
 

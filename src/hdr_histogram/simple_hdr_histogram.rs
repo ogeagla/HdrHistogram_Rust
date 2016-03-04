@@ -91,6 +91,8 @@ pub trait HistogramBase {
     //TODO this block should be default impl of this trait
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
     fn counts_array_index(&self, value: u64) -> usize;
+    //in the Java impl, the functions above/below have same name but are overloaded, which
+    //  Rust does not allow, thus the name change
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
     fn get_bucket_index(&self, value: u64) -> usize;
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize;
@@ -100,7 +102,13 @@ pub trait HistogramBase {
     fn update_max_value(&mut self, value: u64);
     fn update_min_non_zero_value(&mut self, value: u64);
     fn get_count_at_value(&mut self, value: u64) -> Result<u64, String>;
-    fn get_value_at_percentile(&self, percentile: f64) -> u64;
+    fn get_value_at_percentile(&mut self, percentile: f64) -> u64;
+    fn value_from_index(&self, index: usize) -> u64;
+    //in the Java impl, the functions above/below have same name but are overloaded, which
+    //  Rust does not allow, thus the name change
+    fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64;
+    fn lowest_equivalent_value(&self, value: u64) -> u64;
+    fn highest_equivalent_value(&self, value: u64) -> u64;
     // end TODO
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
@@ -113,13 +121,49 @@ pub trait HistogramBase {
 
 impl HistogramBase for SimpleHdrHistogram {
 
-    fn get_value_at_percentile(&self, percentile: f64) -> u64 {
-//        let requested_percentile = cmp::min(percentile, 100.0);
-//        let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count()) + 0.5) as u64;
-//        count_at_percentile = cmp::max(count_at_percentile, 1);
-//        let mut total_to_current_index: u64 = 0;
-        helpers::min_f64(0.0, 0.0);
+    fn highest_equivalent_value(&self, value: u64) -> u64 {
+        //TODO implement this
         1
+    }
+
+    fn lowest_equivalent_value(&self, value: u64) -> u64 {
+        //TODO implement this
+        1
+    }
+
+    fn value_from_index(&self, index: usize) -> u64 {
+        //TODO implement this
+        1
+    }
+
+    fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64 {
+        //TODO implement this
+        1
+    }
+
+    fn get_value_at_percentile(&mut self, percentile: f64) -> u64 {
+        let requested_percentile = helpers::min_f64(percentile, 100.0);
+        let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count() as f64) + 0.5) as u64;
+        count_at_percentile = cmp::max(count_at_percentile, 1);
+        let mut total_to_current_index: u64 = 0;
+        for i in 0..self.counts_array_length {
+            let count_at_index = self.get_count_at_index(i as usize);
+            match count_at_index {
+                Ok(the_index) => {
+                    total_to_current_index += the_index;
+                    if total_to_current_index >= count_at_percentile {
+                        let value_at_index = self.value_from_index(i as usize);
+                        return if percentile == 0.0 {
+                            self.lowest_equivalent_value(value_at_index)
+                        } else {
+                            self.highest_equivalent_value(value_at_index)
+                        }
+                    }
+                }
+                Err(err) => { return 0 }
+            }
+        }
+        0
     }
 
     fn get_count_at_index(&mut self, index: usize) -> Result<u64, String> {

@@ -35,14 +35,37 @@ impl HistogramIterationValue {
     }
 }
 
+#[derive(Debug)]
+pub struct BaseHistogramIterator {
+    pub histogram: SimpleHdrHistogram,
+    pub saved_histogram_total_raw_count: u64,
+    pub current_index: usize,
+    pub current_value_at_index: u64,
+    pub next_value_at_index: u64,
+    pub prev_value_iterated_to: u64,
+    pub total_count_to_prev_index: u64,
+    pub total_count_to_current_index: u64,
+    pub total_value_to_current_index: u64,
+    pub array_total_count: u64,
+    pub count_at_this_value: u64,
+    pub fresh_sub_bucket: bool,
+    pub current_iteration_value: HistogramIterationValue,
+    pub integer_to_double_value_conversion_ratio: u64,
+}
+
+impl BaseHistogramIterator {
+    fn reset_iterator(&mut self, histogram: SimpleHdrHistogram) {
+        //TODO
+    }
+}
 
 #[derive(Debug)]
-pub struct RecordedValueIterator {
+pub struct RecordedValuesIterator {
     //TODO
     pub visitedIndex: u32,
 }
 
-impl Iterator for RecordedValueIterator {
+impl Iterator for RecordedValuesIterator {
     type Item = HistogramIterationValue;
     fn next(&mut self) -> Option<Self::Item> {
         //TODO

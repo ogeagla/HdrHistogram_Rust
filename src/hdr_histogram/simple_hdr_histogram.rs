@@ -209,12 +209,9 @@ impl HistogramBase for SimpleHdrHistogram {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
         let distance_to_next_value =
-            (1 <<
-                (self.unit_magnitude +
-                if (sub_bucket_index as u32 >= self.sub_bucket_count as u32)
-                    {bucket_index as u32 + 1}
-                else
-                    {bucket_index as u32}));
+            1 << (self.unit_magnitude
+                    + bucket_index as u32
+                    + if sub_bucket_index >= self.sub_bucket_count {1} else {0});
         distance_to_next_value as u64
     }
 
@@ -341,8 +338,8 @@ impl HistogramBase for SimpleHdrHistogram {
     }
 
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize {
-        let sum = bucket_index as u32 + self.unit_magnitude;
-        value.rotate_right(sum) as usize
+        // safe cast: sub bucket indexes are at most 2 * 10^precision, so can fit in usize.
+        (value >> (bucket_index as u32 + self.unit_magnitude)) as usize
     }
 
     fn get_bucket_index(&self, value: u64) -> usize {
@@ -383,10 +380,21 @@ impl HistogramBase for SimpleHdrHistogram {
         assert!(bucket_index == 0 || (sub_bucket_index >= self.sub_bucket_half_count));
 
         let bucket_base_index = (bucket_index + 1) << self.sub_bucket_half_count_magnitude;
-        println!("bi: {}, sbi: {}, bbi: {}", bucket_index, sub_bucket_index, bucket_base_index);
-        let offset_in_bucket = sub_bucket_index - self.sub_bucket_half_count;
 
-        bucket_base_index + offset_in_bucket
+        // offset_in_bucket can be negative for bucket 0.
+        // these casts are safe: sub_bucket_index is at most sub_bucket_count, and sub_bucket_count
+        // is at most 2 * 10^precision.
+        let offset_in_bucket: i32 = sub_bucket_index as i32 - self.sub_bucket_half_count as i32;
+
+        // buckets scale with 2^x * (sub bucket count), so bucket index could be at most the bit
+        // length of the value datatype (e.g. 64 bits), and since sub bucket count is > 1 in
+        // practice, it's even smaller. Thus, this case to signed is safe.
+
+        let bucket_base_signed: i32 = bucket_base_index as i32;
+
+        // this always works out to be non-negative: when offset_in_bucket is negative for bucket
+        // 0, bucket_base_index is still at sub bucket half count, so the sum is positive.
+        (bucket_base_signed + offset_in_bucket) as usize
     }
 }
 
@@ -395,8 +403,8 @@ fn count_at_value_on_empty() {
     let mut the_hist = init_histo(1, 100000, 3);
 
     assert_eq!(the_hist.get_count_at_value(1).unwrap(), 0);
-//    assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 0);
-//    assert_eq!(the_hist.get_count_at_value(100000).unwrap(), 0);
+    assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 0);
+    assert_eq!(the_hist.get_count_at_value(100000).unwrap(), 0);
 }
 
 #[test]
@@ -496,7 +504,7 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     let largest_value_with_single_unit_resolution = 2_u64 * 10_u64.pow(num_significant_digits);
 
     let unit_magnitude = ((lowest_discernible_value as f64).ln() / 2_f64.ln()) as u32;
-    let unit_magnitude_mask: u64  = 1_u64.rotate_left(unit_magnitude) - 1;
+    let unit_magnitude_mask: u64  = (1_u64 << unit_magnitude) - 1;
 
     // find nearest power of 2 to largest_value_with_single_unit_resolution
     let sub_bucket_count_magnitude: u32 =
@@ -507,7 +515,7 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     let sub_bucket_count: usize = 2_usize.pow(sub_bucket_half_count_magnitude + 1);
     let sub_bucket_half_count: usize = sub_bucket_count / 2;
     // TODO is this cast OK?
-    let sub_bucket_mask = (sub_bucket_count - 1).rotate_left(unit_magnitude) as u64;
+    let sub_bucket_mask = ((sub_bucket_count - 1) << unit_magnitude) as u64;
 
     let counts_arr_len = counts_arr_len(highest_trackable_value, sub_bucket_count, unit_magnitude);
     let bucket_count = buckets_needed_for_value(highest_trackable_value, sub_bucket_count, unit_magnitude);
@@ -524,15 +532,13 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     hist.counts_array_length = counts_arr_len;
     hist.normalizing_index_offset = 0_usize; // 0 for normal Histogram ctor in Java impl
 
-    println!("hist: {:?}", hist);
-
     hist
 }
 
 fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude: u32) -> usize {
 
     // TODO is this cast ok?
-    let mut smallest_untrackable_value: u64 = sub_bucket_count.rotate_left(unit_magnitude) as u64;
+    let mut smallest_untrackable_value: u64 = (sub_bucket_count << unit_magnitude) as u64;
     let mut buckets_needed: usize = 1;
 
     while smallest_untrackable_value <= value {
@@ -540,7 +546,7 @@ fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude:
             return buckets_needed + 1;
         }
 
-        smallest_untrackable_value = smallest_untrackable_value.rotate_left(1);
+        smallest_untrackable_value = smallest_untrackable_value << 1;
         buckets_needed += 1;
     }
 

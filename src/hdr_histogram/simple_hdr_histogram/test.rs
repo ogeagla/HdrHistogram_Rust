@@ -137,6 +137,26 @@ fn unit_magnitude_mask_1000() {
     assert_eq!(511, h.unit_magnitude_mask);
 }
 
+#[test]
+fn buckets_needed_for_value_small() {
+    assert_eq!(1, buckets_needed_for_value(1900, 2048_usize, 0));
+}
+
+#[test]
+fn buckets_needed_for_value_med() {
+    // 2048 * 2^6 > 100000, so 7 buckets total
+    assert_eq!(7, buckets_needed_for_value(100000, 2048_usize, 0));
+}
+
+#[test]
+fn buckets_needed_for_value_big() {
+    // should hit the case where it detects impending overflow
+    // 2^51 * 2048 == 2^62, so that's 52 buckets, + 1 more to reach the +1 in the value
+    assert_eq!(53, buckets_needed_for_value((1_u64 << 62) + 1, 2048_usize, 0));
+}
+
+
+
 /// lowest_discernible_value: must be >= 1
 /// highest_trackable_value: must be >= 2 * lowest_discernible_value
 /// num_significant_digits: must be <= 5
@@ -162,8 +182,8 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     // TODO is this cast OK?
     let sub_bucket_mask = ((sub_bucket_count - 1) << unit_magnitude) as u64;
 
-    let counts_arr_len = counts_arr_len(highest_trackable_value, sub_bucket_count, unit_magnitude);
     let bucket_count = buckets_needed_for_value(highest_trackable_value, sub_bucket_count, unit_magnitude);
+    let counts_arr_len = counts_arr_len(bucket_count, sub_bucket_count);
 
     let leading_zero_count_base: usize = (64_u32 - unit_magnitude - sub_bucket_half_count_magnitude - 1) as usize;
 
@@ -186,9 +206,12 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
 
 fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude: u32) -> usize {
 
-    // TODO is this cast ok?
-    let mut smallest_untrackable_value: u64 = (sub_bucket_count << unit_magnitude) as u64;
-    let mut buckets_needed: usize = 1;
+    // sub_bucket_count is 2 * 10^precision, so fairly small and certainly fits in u64.
+    // If unit magnitude is too big, this will panic, but not much we can do about it.
+    // Pretty unlikely to have a large unit_magnitude (you'd need at least 46 to cause the max
+    // sized sub_bucket_count of 2^18 to overflow...)
+    let mut smallest_untrackable_value: u64 = (sub_bucket_count as u64) << unit_magnitude;
+    let mut buckets_needed = 1_usize;
 
     while smallest_untrackable_value <= value {
         if smallest_untrackable_value > u64::max_value() / 2 {
@@ -202,10 +225,6 @@ fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude:
     return buckets_needed;
 }
 
-fn counts_arr_len_for_buckets(buckets: usize, sub_bucket_count: usize) -> usize {
-    (buckets + 1) * (sub_bucket_count / 2)
-}
-
-fn counts_arr_len(value: u64, sub_bucket_count: usize, unit_magnitude: u32) -> usize {
-    counts_arr_len_for_buckets(buckets_needed_for_value(value, sub_bucket_count, unit_magnitude), sub_bucket_count)
+fn counts_arr_len(bucket_count: usize, sub_bucket_count: usize) -> usize {
+    (bucket_count + 1) * (sub_bucket_count / 2)
 }

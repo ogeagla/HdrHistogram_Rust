@@ -5,6 +5,7 @@ use num::traits::One;
 use num::traits::ToPrimitive;
 
 mod iterator;
+mod test;
 
 /// Marker trait for types we allow (namely, u8-u64)
 pub trait HistogramCount : Ord + Zero + One + ToPrimitive + Copy {}

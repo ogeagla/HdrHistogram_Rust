@@ -27,7 +27,6 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
     sub_bucket_half_count: usize,
     sub_bucket_half_count_magnitude: u32,
     counts: Vec<T>,
-    counts_array_length: usize,
     normalizing_index_offset: usize,
     max_value: u64,
     min_non_zero_value: u64,
@@ -127,7 +126,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count() as f64) + 0.5) as u64;
         count_at_percentile = cmp::max(count_at_percentile, 1);
         let mut total_to_current_index: u64 = 0;
-        for i in 0..self.counts_array_length {
+        for i in 0..self.counts.len() {
             let count_at_index = self.get_count_at_index(i as usize);
             match count_at_index {
                 Ok(the_index) => {
@@ -150,7 +149,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn get_count_at_index(&self, index: usize) -> Result<T, String> {
         let normalized_index =
-            self.normalize_index(index, self.normalizing_index_offset, self.counts_array_length);
+            self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
         match normalized_index {
             Ok(the_index) =>
                 Ok(self.counts[the_index]),
@@ -160,7 +159,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
     }
 
     fn get_count_at_value(&self, value: u64) -> Result<T, String> {
-        let index = cmp::min(cmp::max(0, self.counts_array_index(value)), self.counts_array_length - 1);
+        let index = cmp::min(cmp::max(0, self.counts_array_index(value)), self.counts.len() - 1);
         self.get_count_at_index(index)
     }
 
@@ -209,7 +208,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String> {
         let normalized_index =
-            self.normalize_index(index, self.normalizing_index_offset, self.counts_array_length);
+            self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
         match normalized_index {
             Ok(the_index) => {
                 self.counts[the_index] = self.counts[the_index] + T::one();

@@ -76,7 +76,7 @@ fn can_get_sub_bucket_index() {
 }
 
 #[test]
-fn sub_bucket_count_medium_precision() {
+fn init_sub_bucket_count_medium_precision() {
     let h = init_histo(1, 100000, 3);
 
     assert_eq!(2048_usize, h.sub_bucket_count);
@@ -86,7 +86,7 @@ fn sub_bucket_count_medium_precision() {
 }
 
 #[test]
-fn sub_bucket_count_min_precision() {
+fn init_sub_bucket_count_min_precision() {
     let h = init_histo(1, 100000, 0);
 
     assert_eq!(2_usize, h.sub_bucket_count);
@@ -96,7 +96,7 @@ fn sub_bucket_count_min_precision() {
 }
 
 #[test]
-fn sub_bucket_count_max_precision() {
+fn init_sub_bucket_count_max_precision() {
     let h = init_histo(1, 100000, 5);
 
     assert_eq!(262144_usize, h.sub_bucket_count);
@@ -106,32 +106,50 @@ fn sub_bucket_count_max_precision() {
 }
 
 #[test]
-fn unit_magnitude_mask_1() {
-    let h = init_histo(1, 100000, 5);
+fn init_sub_bucket_count_medium_precision_unit_magnitude_2() {
+    let h = init_histo(4, 100000, 3);
+
+    assert_eq!(2048_usize, h.sub_bucket_count);
+    assert_eq!(1024_usize, h.sub_bucket_half_count);
+    assert_eq!(10, h.sub_bucket_half_count_magnitude);
+    assert_eq!(2047 << 2, h.sub_bucket_mask);
+}
+
+#[test]
+fn init_unit_magnitude_mask_1() {
+    let h = init_histo(1, 100000, 0);
 
     assert_eq!(0, h.unit_magnitude);
     assert_eq!(0, h.unit_magnitude_mask);
 }
 
 #[test]
-fn unit_magnitude_mask_2() {
-    let h = init_histo(2, 100000, 5);
+fn init_unit_magnitude_mask_2() {
+    let h = init_histo(2, 100000, 0);
 
     assert_eq!(1, h.unit_magnitude);
     assert_eq!(1, h.unit_magnitude_mask);
 }
 
 #[test]
-fn unit_magnitude_mask_3() {
-    let h = init_histo(3, 100000, 5);
+fn init_unit_magnitude_mask_3() {
+    let h = init_histo(3, 100000, 0);
 
     assert_eq!(1, h.unit_magnitude);
     assert_eq!(1, h.unit_magnitude_mask);
 }
 
 #[test]
-fn unit_magnitude_mask_1000() {
-    let h = init_histo(1000, 100000, 5);
+fn init_unit_magnitude_mask_4() {
+    let h = init_histo(4, 100000, 0);
+
+    assert_eq!(2, h.unit_magnitude);
+    assert_eq!(3, h.unit_magnitude_mask);
+}
+
+#[test]
+fn init_unit_magnitude_mask_1000() {
+    let h = init_histo(1000, 100000, 0);
 
     assert_eq!(9, h.unit_magnitude);
     assert_eq!(511, h.unit_magnitude_mask);
@@ -149,10 +167,55 @@ fn buckets_needed_for_value_med() {
 }
 
 #[test]
+fn buckets_needed_for_value_med_unit_magnitude_2() {
+    // (2048 << 2) * 2^4 > 100000, so 5 buckets total
+    assert_eq!(5, buckets_needed_for_value(100000, 2048_usize, 2));
+}
+
+#[test]
 fn buckets_needed_for_value_big() {
     // should hit the case where it detects impending overflow
     // 2^51 * 2048 == 2^62, so that's 52 buckets, + 1 more to reach the +1 in the value
     assert_eq!(53, buckets_needed_for_value((1_u64 << 62) + 1, 2048_usize, 0));
+}
+
+#[test]
+fn init_count_array_len_1_bucket() {
+    let h = init_histo(1, 1000, 3);
+    // sub_bucket_count = 2048, and that > max value
+    assert_eq!(2048, h.counts.len())
+}
+
+#[test]
+fn init_count_array_len_2_bucket() {
+    let h = init_histo(1, 4000, 3);
+    // sub_bucket_count = 2048, 1 more bucket-worth of sub_bucket_half_count to reach 4096
+    assert_eq!(3072, h.counts.len())
+}
+
+#[test]
+fn init_count_array_len_3_bucket() {
+    let h = init_histo(1, 5000, 3);
+    // 0-2047, 2048-4095 by 2, 4096-8191 by 4
+    assert_eq!(4096, h.counts.len())
+}
+
+#[test]
+fn init_leading_zero_count_base() {
+    let h = init_histo(1, 100000, 3);
+
+    assert_eq!(10, h.sub_bucket_half_count_magnitude);
+    assert_eq!(0, h.unit_magnitude);
+    assert_eq!(53_usize, h.leading_zeros_count_base)
+}
+
+#[test]
+fn init_leading_zero_count_base_unit_magnitude_2() {
+    let h = init_histo(4, 100000, 3);
+
+    assert_eq!(10, h.sub_bucket_half_count_magnitude);
+    assert_eq!(2, h.unit_magnitude);
+    assert_eq!(51_usize, h.leading_zeros_count_base)
 }
 
 
@@ -179,12 +242,13 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     let sub_bucket_half_count_magnitude: u32 = (if sub_bucket_count_magnitude > 1 { sub_bucket_count_magnitude } else { 1 }) - 1;
     let sub_bucket_count: usize = 2_usize.pow(sub_bucket_half_count_magnitude + 1);
     let sub_bucket_half_count: usize = sub_bucket_count / 2;
-    // TODO is this cast OK?
-    let sub_bucket_mask = ((sub_bucket_count - 1) << unit_magnitude) as u64;
+    // this cast should be safe; see discussion in buckets_needed_for_value on similar cast
+    let sub_bucket_mask = (sub_bucket_count as u64 - 1) << unit_magnitude;
 
     let bucket_count = buckets_needed_for_value(highest_trackable_value, sub_bucket_count, unit_magnitude);
     let counts_arr_len = counts_arr_len(bucket_count, sub_bucket_count);
 
+    // this is a small number (0 - 63) so any usize can hold it
     let leading_zero_count_base: usize = (64_u32 - unit_magnitude - sub_bucket_half_count_magnitude - 1) as usize;
 
     SimpleHdrHistogram {
@@ -195,7 +259,6 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
         sub_bucket_half_count: sub_bucket_half_count,
         sub_bucket_half_count_magnitude: sub_bucket_half_count_magnitude,
         counts: vec![0; counts_arr_len],
-        counts_array_length: counts_arr_len,
         normalizing_index_offset: 0_usize, // 0 for normal Histogram ctor in Java impl
         min_non_zero_value: u64::max_value(),
         total_count: 0,

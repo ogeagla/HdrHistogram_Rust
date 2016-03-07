@@ -9,19 +9,19 @@ mod iterator;
 ///
 #[derive(Debug)]
 pub struct SimpleHdrHistogram {
-    pub leading_zeros_count_base: usize,
-    pub sub_bucket_mask: u64,
-    pub unit_magnitude: u32,
-    pub sub_bucket_count: usize,
-    pub sub_bucket_half_count: usize,
-    pub sub_bucket_half_count_magnitude: u32,
-    pub counts: Vec<u64>,
-    pub counts_array_length: usize,
-    pub normalizing_index_offset: usize,
-    pub max_value: u64,
-    pub min_non_zero_value: u64,
-    pub unit_magnitude_mask: u64,
-    pub total_count: u64,
+    leading_zeros_count_base: usize,
+    sub_bucket_mask: u64,
+    unit_magnitude: u32,
+    sub_bucket_count: usize,
+    sub_bucket_half_count: usize,
+    sub_bucket_half_count_magnitude: u32,
+    counts: Vec<u64>,
+    counts_array_length: usize,
+    normalizing_index_offset: usize,
+    max_value: u64,
+    min_non_zero_value: u64,
+    unit_magnitude_mask: u64,
+    total_count: u64,
 }
 
 ///

@@ -2,15 +2,15 @@ use hdr_histogram::simple_hdr_histogram::*;
 
 #[derive(Debug)]
 pub struct HistogramIterationValue {
-    pub value_iterated_to: u64,
-    pub value_iterated_from: u64,
-    pub count_at_value_iterated_to: u64,
-    pub count_added_in_this_iteration_step: u64,
-    pub total_count_to_this_value: u64,
-    pub total_value_to_this_value: u64,
-    pub percentile: f64,
-    pub percentile_level_iterated_to: f64,
-    pub integer_to_double_value_conversion_ratio: f64,
+    value_iterated_to: u64,
+    value_iterated_from: u64,
+    count_at_value_iterated_to: u64,
+    count_added_in_this_iteration_step: u64,
+    total_count_to_this_value: u64,
+    total_value_to_this_value: u64,
+    percentile: f64,
+    percentile_level_iterated_to: f64,
+    integer_to_double_value_conversion_ratio: f64,
 }
 
 impl Default for HistogramIterationValue {
@@ -37,20 +37,20 @@ impl HistogramIterationValue {
 
 #[derive(Debug)]
 pub struct BaseHistogramIterator {
-    pub histogram: SimpleHdrHistogram,
-    pub saved_histogram_total_raw_count: u64,
-    pub current_index: usize,
-    pub current_value_at_index: u64,
-    pub next_value_at_index: u64,
-    pub prev_value_iterated_to: u64,
-    pub total_count_to_prev_index: u64,
-    pub total_count_to_current_index: u64,
-    pub total_value_to_current_index: u64,
-    pub array_total_count: u64,
-    pub count_at_this_value: u64,
-    pub fresh_sub_bucket: bool,
-    pub current_iteration_value: HistogramIterationValue,
-    pub integer_to_double_value_conversion_ratio: u64,
+    histogram: SimpleHdrHistogram,
+    saved_histogram_total_raw_count: u64,
+    current_index: usize,
+    current_value_at_index: u64,
+    next_value_at_index: u64,
+    prev_value_iterated_to: u64,
+    total_count_to_prev_index: u64,
+    total_count_to_current_index: u64,
+    total_value_to_current_index: u64,
+    array_total_count: u64,
+    count_at_this_value: u64,
+    fresh_sub_bucket: bool,
+    current_iteration_value: HistogramIterationValue,
+    integer_to_double_value_conversion_ratio: u64,
 }
 
 impl BaseHistogramIterator {
@@ -62,7 +62,7 @@ impl BaseHistogramIterator {
 #[derive(Debug)]
 pub struct RecordedValuesIterator {
     //TODO
-    pub visitedIndex: u32,
+    visitedIndex: u32,
 }
 
 impl Iterator for RecordedValuesIterator {

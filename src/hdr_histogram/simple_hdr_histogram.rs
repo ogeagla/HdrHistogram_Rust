@@ -74,42 +74,6 @@ impl Iterator for RecordedValuesIterator {
 }
 
 ///
-/// This module contains helpers, but should be extracted into the project top-level
-/// min and max impls are gross, but they work
-///
-mod helpers {
-    ///
-    /// return whichever double is smaller
-    ///
-    pub fn min_f64(first: f64, second: f64) -> f64 {
-        match first < second {
-            true => first,
-            false => second
-        }
-    }
-    ///
-    /// return whichever double is bigger
-    ///
-    pub fn max_f64(first: f64, second: f64) -> f64 {
-        match first > second {
-            true => first,
-            false => second
-        }
-    }
-    #[test]
-    pub fn min_64_works() {
-        assert_eq!(min_f64(1.0, 2.0), 1.0);
-        assert_eq!(min_f64(2.0, 2.0), 2.0);
-        assert_eq!(min_f64(2.0, 1.0), 1.0);
-    }
-    #[test]
-    pub fn max_64_works() {
-        assert_eq!(max_f64(1.0, 2.0), 2.0);
-        assert_eq!(max_f64(2.0, 2.0), 2.0);
-        assert_eq!(max_f64(2.0, 1.0), 2.0);
-    }
-}
-///
 /// This struct essentially encapsulates the "instance variables" of the histogram
 ///
 #[derive(Debug)]
@@ -241,7 +205,7 @@ impl HistogramBase for SimpleHdrHistogram {
     }
 
     fn get_value_at_percentile(&mut self, percentile: f64) -> u64 {
-        let requested_percentile = helpers::min_f64(percentile, 100.0);
+        let requested_percentile = percentile.min(100.0);
         let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count() as f64) + 0.5) as u64;
         count_at_percentile = cmp::max(count_at_percentile, 1);
         let mut total_to_current_index: u64 = 0;

@@ -4,9 +4,9 @@ use hdr_histogram::simple_hdr_histogram::*;
 fn count_at_value_on_empty() {
     let h = init_histo(1, 100000, 3);
 
-    assert_eq!(h.get_count_at_value(1).unwrap(), 0);
-    assert_eq!(h.get_count_at_value(5000).unwrap(), 0);
-    assert_eq!(h.get_count_at_value(100000).unwrap(), 0);
+    assert_eq!(0, h.get_count_at_value(1).unwrap());
+    assert_eq!(0, h.get_count_at_value(5000).unwrap());
+    assert_eq!(0, h.get_count_at_value(100000).unwrap());
 }
 
 #[test]
@@ -15,9 +15,9 @@ fn count_at_value_after_record() {
 
     h.record_single_value(5000).unwrap();
 
-    assert_eq!(h.get_count_at_value(1).unwrap(), 0);
-    assert_eq!(h.get_count_at_value(5000).unwrap(), 1);
-    assert_eq!(h.get_count_at_value(100000).unwrap(), 0);
+    assert_eq!(0, h.get_count_at_value(1).unwrap());
+    assert_eq!(1, h.get_count_at_value(5000).unwrap());
+    assert_eq!(0, h.get_count_at_value(100000).unwrap());
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn can_get_count_after_record() {
     h.record_single_value(5000).unwrap();
 
     let count = h.get_count();
-    assert_eq!(count, 1);
+    assert_eq!(1, count);
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn can_get_max_after_record() {
     h.record_single_value(5000).unwrap();
 
     let max = h.get_max();
-    assert_eq!(max, 5000);
+    assert_eq!(5000, max);
 }
 
 #[test]
@@ -48,9 +48,9 @@ fn can_record_single_value() {
 fn can_compute_indexes_for_smallest_value() {
     let h = init_histo(1, 100000, 3);
     let value = 1;
-    assert_eq!(h.get_bucket_index(value), 0);
-    assert_eq!(h.get_sub_bucket_index(value, 0), 1);
-    assert_eq!(h.counts_array_index(value), 1);
+    assert_eq!(0, h.get_bucket_index(value));
+    assert_eq!(1, h.get_sub_bucket_index(value, 0));
+    assert_eq!(1, h.counts_array_index(value));
 }
 
 #[test]
@@ -58,21 +58,21 @@ fn can_compute_counts_array_index() {
     let h = init_histo(1, 100000, 3);
     let result = h.counts_array_index(5000);
 
-    assert_eq!(result, 3298);
+    assert_eq!(3298, result);
 }
 
 #[test]
 fn can_get_bucket_index() {
     let h = init_histo(1, 100000, 3);
     let result = h.get_bucket_index(5000);
-    assert_eq!(result, 2)
+    assert_eq!(2, result)
 }
 
 #[test]
 fn can_get_sub_bucket_index() {
     let h = init_histo(1, 100000, 3);
     let result = h.get_sub_bucket_index(5000, 2);
-    assert_eq!(result, 1250)
+    assert_eq!(1250, result)
 }
 
 #[test]

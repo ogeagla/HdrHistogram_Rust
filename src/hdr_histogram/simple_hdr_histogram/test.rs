@@ -64,7 +64,7 @@ fn can_compute_counts_array_index() {
 #[test]
 fn get_bucket_index_smallest_value_in_first_bucket() {
     let h = init_histo(1, 100000, 3);
-    assert_eq!(0, h.get_bucket_index(1))
+    assert_eq!(0, h.get_bucket_index(0))
 }
 
 #[test]
@@ -102,6 +102,61 @@ fn get_bucket_index_smallest_value_in_last_bucket() {
 }
 
 #[test]
+fn get_sub_bucket_index_zero_value_in_first_bucket() {
+    let h = init_histo(1, 100000, 3);
+    // below min distinguishable value, but still gets bucketed into 0
+    let value = 0;
+    assert_eq!(0, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_smallest_distinguishable_value_in_first_bucket() {
+    let h = init_histo(1, 100000, 3);
+    let value = 1;
+    assert_eq!(1, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_zero_value_in_first_bucket_unit_magnitude_2() {
+    let h = init_histo(4, 100000, 3);
+    let value = 0;
+    assert_eq!(2, h.unit_magnitude);
+    assert_eq!(0, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_smaller_than_distinguishable_value_in_first_bucket_unit_magnitude_2() {
+    let h = init_histo(4, 100000, 3);
+    let value = 3;
+    assert_eq!(2, h.unit_magnitude);
+    assert_eq!(0, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_smallest_distinguishable_value_in_first_bucket_unit_magnitude_2() {
+    let h = init_histo(4, 100000, 3);
+    let value = 4;
+    assert_eq!(2, h.unit_magnitude);
+    assert_eq!(1, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_largest_value_in_first_bucket_unit_magnitude_2() {
+    let h = init_histo(4, 100000, 3);
+    let value = 2048 * 4 - 1;
+    assert_eq!(2, h.unit_magnitude);
+    assert_eq!(2047, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_smallest_value_in_second_bucket_unit_magnitude_2() {
+    let h = init_histo(4, 100000, 3);
+    let value = 2048 * 4;
+    assert_eq!(2, h.unit_magnitude);
+    assert_eq!(1024, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
 fn get_sub_bucket_index_largest_value_in_first_bucket() {
     let h = init_histo(1, 100000, 3);
     let value = 2047;
@@ -135,10 +190,35 @@ fn get_sub_bucket_index_smallest_value_in_third_bucket() {
 }
 
 #[test]
-fn can_get_sub_bucket_index() {
+fn counts_array_index_sub_first_bucket_first_entry() {
     let h = init_histo(1, 100000, 3);
-    let result = h.get_sub_bucket_index(5000, 2);
-    assert_eq!(1250, result)
+    assert_eq!(0, h.counts_array_index_sub(0, 0));
+}
+
+#[test]
+fn counts_array_index_sub_first_bucket_first_distinguishable_entry() {
+    let h = init_histo(1, 100000, 3);
+    assert_eq!(1, h.counts_array_index_sub(0, 1));
+}
+
+#[test]
+fn counts_array_index_sub_first_bucket_last_entry() {
+    let h = init_histo(1, 100000, 3);
+    assert_eq!(2047, h.counts_array_index_sub(0, 2047));
+}
+
+#[test]
+fn counts_array_index_sub_second_bucket_first_entry() {
+    let h = init_histo(1, 100000, 3);
+    // halfway thru bucket, but bottom half is ignored on non-first bucket, so ends up at end of
+    // first bucket + 1
+    assert_eq!(2048, h.counts_array_index_sub(1, 1024));
+}
+
+#[test]
+fn counts_array_index_sub_second_bucket_last_entry() {
+    let h = init_histo(1, 100000, 3);
+    assert_eq!(2048 + 1023, h.counts_array_index_sub(1, 2047));
 }
 
 #[test]

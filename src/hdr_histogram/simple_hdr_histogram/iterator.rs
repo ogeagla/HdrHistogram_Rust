@@ -62,7 +62,7 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
 #[derive(Debug)]
 pub struct RecordedValuesIterator {
     //TODO
-    visitedIndex: u32,
+    visited_index: u32,
 }
 
 impl Iterator for RecordedValuesIterator {

@@ -142,7 +142,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
                         }
                     }
                 }
-                Err(err) => { return 0 }
+                Err(_) => { return 0 }
             }
         }
         0

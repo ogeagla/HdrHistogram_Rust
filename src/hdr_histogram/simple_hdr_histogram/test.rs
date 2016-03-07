@@ -2,7 +2,7 @@ use hdr_histogram::simple_hdr_histogram::*;
 
 #[test]
 fn count_at_value_on_empty() {
-    let mut the_hist = init_histo(1, 100000, 3);
+    let the_hist = init_histo(1, 100000, 3);
 
     assert_eq!(the_hist.get_count_at_value(1).unwrap(), 0);
     assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 0);

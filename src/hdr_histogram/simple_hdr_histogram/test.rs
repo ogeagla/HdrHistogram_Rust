@@ -105,6 +105,38 @@ fn sub_bucket_count_max_precision() {
     assert_eq!(262143, h.sub_bucket_mask);
 }
 
+#[test]
+fn unit_magnitude_mask_1() {
+    let h = init_histo(1, 100000, 5);
+
+    assert_eq!(0, h.unit_magnitude);
+    assert_eq!(0, h.unit_magnitude_mask);
+}
+
+#[test]
+fn unit_magnitude_mask_2() {
+    let h = init_histo(2, 100000, 5);
+
+    assert_eq!(1, h.unit_magnitude);
+    assert_eq!(1, h.unit_magnitude_mask);
+}
+
+#[test]
+fn unit_magnitude_mask_3() {
+    let h = init_histo(3, 100000, 5);
+
+    assert_eq!(1, h.unit_magnitude);
+    assert_eq!(1, h.unit_magnitude_mask);
+}
+
+#[test]
+fn unit_magnitude_mask_1000() {
+    let h = init_histo(1000, 100000, 5);
+
+    assert_eq!(9, h.unit_magnitude);
+    assert_eq!(511, h.unit_magnitude_mask);
+}
+
 /// lowest_discernible_value: must be >= 1
 /// highest_trackable_value: must be >= 2 * lowest_discernible_value
 /// num_significant_digits: must be <= 5

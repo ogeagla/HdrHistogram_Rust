@@ -13,11 +13,7 @@ fn count_at_value_on_empty() {
 fn count_at_value_after_record() {
     let mut the_hist = init_histo(1, 100000, 3);
 
-    let result = the_hist.record_single_value(5000);
-    match result {
-        Ok(_) => (),
-        Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
-    }
+    the_hist.record_single_value(5000).unwrap();
 
     assert_eq!(the_hist.get_count_at_value(1).unwrap(), 0);
     assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 1);
@@ -27,11 +23,7 @@ fn count_at_value_after_record() {
 #[test]
 fn can_get_count_after_record() {
     let mut the_hist = init_histo(1, 100000, 3);
-    let result = the_hist.record_single_value(5000);
-    match result {
-        Ok(_) => (),
-        Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
-    }
+    the_hist.record_single_value(5000).unwrap();
 
     let count = the_hist.get_count();
     assert_eq!(count, 1);
@@ -40,11 +32,7 @@ fn can_get_count_after_record() {
 #[test]
 fn can_get_max_after_record() {
     let mut the_hist = init_histo(1, 100000, 3);
-    let result = the_hist.record_single_value(5000);
-    match result {
-        Ok(_) => (),
-        Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
-    }
+    the_hist.record_single_value(5000).unwrap();
 
     let max = the_hist.get_max();
     assert_eq!(max, 5000);
@@ -53,12 +41,7 @@ fn can_get_max_after_record() {
 #[test]
 fn can_record_single_value() {
     let mut the_hist = init_histo(1, 100000, 3);
-    let result = the_hist.record_single_value(5000);
-
-    match result {
-        Ok(_) => (),
-        Err(err) => panic!(format!("could not add single record to histogram because error: {}", err))
-    }
+    the_hist.record_single_value(5000).unwrap();
 }
 
 #[test]

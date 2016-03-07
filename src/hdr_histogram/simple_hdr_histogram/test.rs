@@ -62,10 +62,76 @@ fn can_compute_counts_array_index() {
 }
 
 #[test]
-fn can_get_bucket_index() {
+fn get_bucket_index_smallest_value_in_first_bucket() {
     let h = init_histo(1, 100000, 3);
-    let result = h.get_bucket_index(5000);
-    assert_eq!(2, result)
+    assert_eq!(0, h.get_bucket_index(1))
+}
+
+#[test]
+fn get_bucket_index_biggest_value_in_first_bucket() {
+    let h = init_histo(1, 100000, 3);
+    // sub bucket size 2048, and first bucket uses all 2048 slots
+    assert_eq!(0, h.get_bucket_index(2047))
+}
+
+#[test]
+fn get_bucket_index_smallest_value_in_second_bucket() {
+    let h = init_histo(1, 100000, 3);
+    assert_eq!(1, h.get_bucket_index(2048))
+}
+
+#[test]
+fn get_bucket_index_biggest_value_in_second_bucket() {
+    let h = init_histo(1, 100000, 3);
+    // second value uses only 1024 slots, but scales by 2
+    assert_eq!(1, h.get_bucket_index(4095))
+}
+
+#[test]
+fn get_bucket_index_smallest_value_in_third_bucket() {
+    let h = init_histo(1, 100000, 3);
+    assert_eq!(2, h.get_bucket_index(4096))
+}
+
+#[test]
+fn get_bucket_index_smallest_value_in_last_bucket() {
+    let h = init_histo(1, 100000, 3);
+
+    // 7 buckets total
+    assert_eq!(6, h.get_bucket_index(65536))
+}
+
+#[test]
+fn get_sub_bucket_index_largest_value_in_first_bucket() {
+    let h = init_histo(1, 100000, 3);
+    let value = 2047;
+    assert_eq!(2047, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_smalles_value_in_second_bucket() {
+    let h = init_histo(1, 100000, 3);
+    let value = 2048;
+
+    // at midpoint of bucket, which is the first position actually used in second bucket
+    assert_eq!(1024, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_biggest_value_in_second_bucket() {
+    let h = init_histo(1, 100000, 3);
+    let value = 4095;
+
+    // at endpoint of bucket, which is the last position actually used in second bucket
+    assert_eq!(2047, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
+}
+
+#[test]
+fn get_sub_bucket_index_smallest_value_in_third_bucket() {
+    let h = init_histo(1, 100000, 3);
+    let value = 4096;
+
+    assert_eq!(1024, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
 }
 
 #[test]

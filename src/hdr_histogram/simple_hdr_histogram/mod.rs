@@ -35,9 +35,6 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
 }
 
 pub trait HistogramBase<T: HistogramCount> {
-
-    //FIXME this stuff could be mostly unsigned
-
     //TODO this block should be default impl of this trait
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
     fn counts_array_index(&self, value: u64) -> usize;

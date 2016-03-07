@@ -1,21 +1,31 @@
 use std::cmp;
-
-#[cfg(test)] mod test;
+use std::cmp::Ord;
+use num::traits::Zero;
+use num::traits::One;
+use num::traits::ToPrimitive;
 
 mod iterator;
+
+/// Marker trait for types we allow (namely, u8-u64)
+pub trait HistogramCount : Ord + Zero + One + ToPrimitive + Copy {}
+
+impl HistogramCount for u8 {}
+impl HistogramCount for u16 {}
+impl HistogramCount for u32 {}
+impl HistogramCount for u64 {}
 
 ///
 /// This struct essentially encapsulates the "instance variables" of the histogram
 ///
 #[derive(Debug)]
-pub struct SimpleHdrHistogram {
+pub struct SimpleHdrHistogram<T:HistogramCount> {
     leading_zeros_count_base: usize,
     sub_bucket_mask: u64,
     unit_magnitude: u32,
     sub_bucket_count: usize,
     sub_bucket_half_count: usize,
     sub_bucket_half_count_magnitude: u32,
-    counts: Vec<u64>,
+    counts: Vec<T>,
     counts_array_length: usize,
     normalizing_index_offset: usize,
     max_value: u64,
@@ -24,7 +34,7 @@ pub struct SimpleHdrHistogram {
     total_count: u64,
 }
 
-pub trait HistogramBase {
+pub trait HistogramBase<T: HistogramCount> {
 
     //FIXME this stuff could be mostly unsigned
 
@@ -41,8 +51,8 @@ pub trait HistogramBase {
     fn update_min_and_max(&mut self, value: u64);
     fn update_max_value(&mut self, value: u64);
     fn update_min_non_zero_value(&mut self, value: u64);
-    fn get_count_at_value(&mut self, value: u64) -> Result<u64, String>;
-    fn get_value_at_percentile(&mut self, percentile: f64) -> u64;
+    fn get_count_at_value(&self, value: u64) -> Result<T, String>;
+    fn get_value_at_percentile(&self, percentile: f64) -> u64;
     fn value_from_index(&self, index: usize) -> u64;
     // in the Java impl, the functions above/below have same name but are overloaded, which
     //  Rust does not allow, thus the name change
@@ -58,11 +68,11 @@ pub trait HistogramBase {
     fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
         Result<usize, String>;
     fn increment_total_count(&mut self);
-    fn get_count_at_index(&mut self, index: usize) -> Result<u64, String>;
+    fn get_count_at_index(&self, index: usize) -> Result<T, String>;
 
 }
 
-impl HistogramBase for SimpleHdrHistogram {
+impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn get_mean(&self) -> f64 {
 
@@ -111,7 +121,7 @@ impl HistogramBase for SimpleHdrHistogram {
         (sub_bucket_index as u64) << (bucket_index as u32 + self.unit_magnitude)
     }
 
-    fn get_value_at_percentile(&mut self, percentile: f64) -> u64 {
+    fn get_value_at_percentile(&self, percentile: f64) -> u64 {
         let requested_percentile = percentile.min(100.0);
         let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count() as f64) + 0.5) as u64;
         count_at_percentile = cmp::max(count_at_percentile, 1);
@@ -120,7 +130,8 @@ impl HistogramBase for SimpleHdrHistogram {
             let count_at_index = self.get_count_at_index(i as usize);
             match count_at_index {
                 Ok(the_index) => {
-                    total_to_current_index += the_index;
+                    // we only use u8 - u64 types, so this must always work
+                    total_to_current_index += the_index.to_u64().unwrap();
                     if total_to_current_index >= count_at_percentile {
                         let value_at_index = self.value_from_index(i as usize);
                         return if percentile == 0.0 {
@@ -136,7 +147,7 @@ impl HistogramBase for SimpleHdrHistogram {
         0
     }
 
-    fn get_count_at_index(&mut self, index: usize) -> Result<u64, String> {
+    fn get_count_at_index(&self, index: usize) -> Result<T, String> {
         let normalized_index =
             self.normalize_index(index, self.normalizing_index_offset, self.counts_array_length);
         match normalized_index {
@@ -147,7 +158,7 @@ impl HistogramBase for SimpleHdrHistogram {
         }
     }
 
-    fn get_count_at_value(&mut self, value: u64) -> Result<u64, String> {
+    fn get_count_at_value(&self, value: u64) -> Result<T, String> {
         let index = cmp::min(cmp::max(0, self.counts_array_index(value)), self.counts_array_length - 1);
         self.get_count_at_index(index)
     }
@@ -200,7 +211,7 @@ impl HistogramBase for SimpleHdrHistogram {
             self.normalize_index(index, self.normalizing_index_offset, self.counts_array_length);
         match normalized_index {
             Ok(the_index) => {
-                self.counts[the_index] += 1;
+                self.counts[the_index] = self.counts[the_index] + T::one();
                 Ok(())
             }
             Err(err) =>

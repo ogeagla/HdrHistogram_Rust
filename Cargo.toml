@@ -6,3 +6,6 @@ authors = [ "Octavian Geagla <ogeagla@gmail.com>", "Marshall Pierce <marshall@mp
 [[bin]]
 name = "hdr_histo_main_bin"
 path = "src/main.rs"
+
+[dependencies]
+num = "0.1"

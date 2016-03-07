@@ -95,7 +95,7 @@ fn can_get_sub_bucket_index() {
 /// lowest_discernible_value: must be >= 1
 /// highest_trackable_value: must be >= 2 * lowest_discernible_value
 /// num_significant_digits: must be <= 5
-fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram {
+fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram<u64> {
 
     assert!(lowest_discernible_value >= 1);
     assert!(highest_trackable_value >= 2 * lowest_discernible_value);

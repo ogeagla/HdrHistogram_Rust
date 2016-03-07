@@ -36,8 +36,8 @@ impl HistogramIterationValue {
 }
 
 #[derive(Debug)]
-pub struct BaseHistogramIterator {
-    histogram: SimpleHdrHistogram,
+pub struct BaseHistogramIterator<T: HistogramCount> {
+    histogram: SimpleHdrHistogram<T>,
     saved_histogram_total_raw_count: u64,
     current_index: usize,
     current_value_at_index: u64,
@@ -53,8 +53,8 @@ pub struct BaseHistogramIterator {
     integer_to_double_value_conversion_ratio: u64,
 }
 
-impl BaseHistogramIterator {
-    fn reset_iterator(&mut self, histogram: SimpleHdrHistogram) {
+impl<T: HistogramCount> BaseHistogramIterator<T> {
+    fn reset_iterator(&mut self, histogram: SimpleHdrHistogram<T>) {
         //TODO
     }
 }

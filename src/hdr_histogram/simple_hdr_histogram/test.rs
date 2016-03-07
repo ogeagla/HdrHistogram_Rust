@@ -2,77 +2,107 @@ use hdr_histogram::simple_hdr_histogram::*;
 
 #[test]
 fn count_at_value_on_empty() {
-    let the_hist = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100000, 3);
 
-    assert_eq!(the_hist.get_count_at_value(1).unwrap(), 0);
-    assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 0);
-    assert_eq!(the_hist.get_count_at_value(100000).unwrap(), 0);
+    assert_eq!(h.get_count_at_value(1).unwrap(), 0);
+    assert_eq!(h.get_count_at_value(5000).unwrap(), 0);
+    assert_eq!(h.get_count_at_value(100000).unwrap(), 0);
 }
 
 #[test]
 fn count_at_value_after_record() {
-    let mut the_hist = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100000, 3);
 
-    the_hist.record_single_value(5000).unwrap();
+    h.record_single_value(5000).unwrap();
 
-    assert_eq!(the_hist.get_count_at_value(1).unwrap(), 0);
-    assert_eq!(the_hist.get_count_at_value(5000).unwrap(), 1);
-    assert_eq!(the_hist.get_count_at_value(100000).unwrap(), 0);
+    assert_eq!(h.get_count_at_value(1).unwrap(), 0);
+    assert_eq!(h.get_count_at_value(5000).unwrap(), 1);
+    assert_eq!(h.get_count_at_value(100000).unwrap(), 0);
 }
 
 #[test]
 fn can_get_count_after_record() {
-    let mut the_hist = init_histo(1, 100000, 3);
-    the_hist.record_single_value(5000).unwrap();
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(5000).unwrap();
 
-    let count = the_hist.get_count();
+    let count = h.get_count();
     assert_eq!(count, 1);
 }
 
 #[test]
 fn can_get_max_after_record() {
-    let mut the_hist = init_histo(1, 100000, 3);
-    the_hist.record_single_value(5000).unwrap();
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(5000).unwrap();
 
-    let max = the_hist.get_max();
+    let max = h.get_max();
     assert_eq!(max, 5000);
 }
 
 #[test]
 fn can_record_single_value() {
-    let mut the_hist = init_histo(1, 100000, 3);
-    the_hist.record_single_value(5000).unwrap();
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(5000).unwrap();
 }
 
 #[test]
 fn can_compute_indexes_for_smallest_value() {
-    let the_hist = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100000, 3);
     let value = 1;
-    assert_eq!(the_hist.get_bucket_index(value), 0);
-    assert_eq!(the_hist.get_sub_bucket_index(value, 0), 1);
-    assert_eq!(the_hist.counts_array_index(value), 1);
+    assert_eq!(h.get_bucket_index(value), 0);
+    assert_eq!(h.get_sub_bucket_index(value, 0), 1);
+    assert_eq!(h.counts_array_index(value), 1);
 }
 
 #[test]
 fn can_compute_counts_array_index() {
-    let the_hist = init_histo(1, 100000, 3);
-    let result = the_hist.counts_array_index(5000);
+    let h = init_histo(1, 100000, 3);
+    let result = h.counts_array_index(5000);
 
     assert_eq!(result, 3298);
 }
 
 #[test]
 fn can_get_bucket_index() {
-    let the_hist = init_histo(1, 100000, 3);
-    let result = the_hist.get_bucket_index(5000);
+    let h = init_histo(1, 100000, 3);
+    let result = h.get_bucket_index(5000);
     assert_eq!(result, 2)
 }
 
 #[test]
 fn can_get_sub_bucket_index() {
-    let the_hist = init_histo(1, 100000, 3);
-    let result = the_hist.get_sub_bucket_index(5000, 2);
+    let h = init_histo(1, 100000, 3);
+    let result = h.get_sub_bucket_index(5000, 2);
     assert_eq!(result, 1250)
+}
+
+#[test]
+fn sub_bucket_count_medium_precision() {
+    let h = init_histo(1, 100000, 3);
+
+    assert_eq!(2048_usize, h.sub_bucket_count);
+    assert_eq!(1024_usize, h.sub_bucket_half_count);
+    assert_eq!(10, h.sub_bucket_half_count_magnitude);
+    assert_eq!(2047, h.sub_bucket_mask);
+}
+
+#[test]
+fn sub_bucket_count_min_precision() {
+    let h = init_histo(1, 100000, 0);
+
+    assert_eq!(2_usize, h.sub_bucket_count);
+    assert_eq!(1_usize, h.sub_bucket_half_count);
+    assert_eq!(0, h.sub_bucket_half_count_magnitude);
+    assert_eq!(1, h.sub_bucket_mask);
+}
+
+#[test]
+fn sub_bucket_count_max_precision() {
+    let h = init_histo(1, 100000, 5);
+
+    assert_eq!(262144_usize, h.sub_bucket_count);
+    assert_eq!(131072usize, h.sub_bucket_half_count);
+    assert_eq!(17, h.sub_bucket_half_count_magnitude);
+    assert_eq!(262143, h.sub_bucket_mask);
 }
 
 /// lowest_discernible_value: must be >= 1
@@ -107,8 +137,8 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
 
     SimpleHdrHistogram {
         leading_zeros_count_base: leading_zero_count_base,
-        sub_bucket_mask: sub_bucket_mask,
         unit_magnitude: unit_magnitude,
+        sub_bucket_mask: sub_bucket_mask,
         sub_bucket_count: sub_bucket_count,
         sub_bucket_half_count: sub_bucket_half_count,
         sub_bucket_half_count_magnitude: sub_bucket_half_count_magnitude,

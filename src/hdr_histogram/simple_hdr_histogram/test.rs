@@ -101,8 +101,6 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
     assert!(highest_trackable_value >= 2 * lowest_discernible_value);
     assert!(num_significant_digits <= 5);
 
-    let mut hist =  SimpleHdrHistogram { ..Default::default() };
-
     let largest_value_with_single_unit_resolution = 2_u64 * 10_u64.pow(num_significant_digits);
 
     let unit_magnitude = ((lowest_discernible_value as f64).ln() / 2_f64.ln()) as u32;
@@ -124,17 +122,21 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
 
     let leading_zero_count_base: usize = (64_u32 - unit_magnitude - sub_bucket_half_count_magnitude - 1) as usize;
 
-    hist.leading_zeros_count_base = leading_zero_count_base;
-    hist.sub_bucket_mask = sub_bucket_mask;
-    hist.unit_magnitude = unit_magnitude;
-    hist.sub_bucket_count = sub_bucket_count;
-    hist.sub_bucket_half_count = sub_bucket_half_count;
-    hist.sub_bucket_half_count_magnitude = sub_bucket_half_count_magnitude;
-    hist.counts = vec![0; counts_arr_len];
-    hist.counts_array_length = counts_arr_len;
-    hist.normalizing_index_offset = 0_usize; // 0 for normal Histogram ctor in Java impl
-
-    hist
+    SimpleHdrHistogram {
+        leading_zeros_count_base: leading_zero_count_base,
+        sub_bucket_mask: sub_bucket_mask,
+        unit_magnitude: unit_magnitude,
+        sub_bucket_count: sub_bucket_count,
+        sub_bucket_half_count: sub_bucket_half_count,
+        sub_bucket_half_count_magnitude: sub_bucket_half_count_magnitude,
+        counts: vec![0; counts_arr_len],
+        counts_array_length: counts_arr_len,
+        normalizing_index_offset: 0_usize, // 0 for normal Histogram ctor in Java impl
+        min_non_zero_value: u64::max_value(),
+        total_count: 0,
+        max_value: 0,
+        unit_magnitude_mask: unit_magnitude_mask
+    }
 }
 
 fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude: u32) -> usize {

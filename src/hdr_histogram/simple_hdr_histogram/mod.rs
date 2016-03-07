@@ -24,30 +24,6 @@ pub struct SimpleHdrHistogram {
     total_count: u64,
 }
 
-///
-/// Implementing this trait (Default) for our struct gives us a nice way to
-/// initialize an instance using default args instead of having to provide all of them
-///
-impl Default for SimpleHdrHistogram {
-    fn default() -> SimpleHdrHistogram {
-        SimpleHdrHistogram {
-            leading_zeros_count_base: 0,
-            sub_bucket_mask: 0,
-            unit_magnitude: 0,
-            sub_bucket_count: 0,
-            sub_bucket_half_count: 0,
-            sub_bucket_half_count_magnitude: 0,
-            counts: Vec::new(),
-            counts_array_length: 0,
-            normalizing_index_offset: 0,
-            max_value: 0,
-            min_non_zero_value: u64::max_value(),
-            unit_magnitude_mask: 0,
-            total_count: 0,
-        }
-    }
-}
-
 pub trait HistogramBase {
 
     //FIXME this stuff could be mostly unsigned

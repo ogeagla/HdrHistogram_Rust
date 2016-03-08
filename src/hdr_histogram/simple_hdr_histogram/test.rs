@@ -21,7 +21,24 @@ fn count_at_value_after_record() {
 }
 
 #[test]
-fn can_get_count_after_record() {
+fn get_count_after_record() {
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(5000).unwrap();
+
+    assert_eq!(1, h.get_count());
+}
+
+#[test]
+fn get_count_after_record_twice() {
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(5000).unwrap();
+    h.record_single_value(5001).unwrap();
+
+    assert_eq!(2, h.get_count());
+}
+
+#[test]
+fn get_count_empty() {
     let mut h = init_histo(1, 100000, 3);
     h.record_single_value(5000).unwrap();
 
@@ -30,12 +47,27 @@ fn can_get_count_after_record() {
 }
 
 #[test]
-fn can_get_max_after_record() {
+fn get_max_after_record() {
     let mut h = init_histo(1, 100000, 3);
     h.record_single_value(5000).unwrap();
 
-    let max = h.get_max();
-    assert_eq!(5000, max);
+    assert_eq!(5000, h.get_max());
+}
+
+#[test]
+fn get_max_record_smaller_value_doesnt_update_max() {
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(5000).unwrap();
+    h.record_single_value(2000).unwrap();
+
+    assert_eq!(5000, h.get_max());
+}
+
+#[test]
+fn get_max_empty() {
+    let mut h = init_histo(1, 100000, 3);
+
+    assert_eq!(0, h.get_max());
 }
 
 #[test]

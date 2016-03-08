@@ -151,6 +151,78 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
 impl<T: HistogramCount> SimpleHdrHistogram<T> {
 
+    /// lowest_discernible_value: must be >= 1
+    /// highest_trackable_value: must be >= 2 * lowest_discernible_value
+    /// num_significant_digits: must be <= 5
+    pub fn new(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram<T> {
+
+        assert!(lowest_discernible_value >= 1);
+        assert!(highest_trackable_value >= 2 * lowest_discernible_value);
+        assert!(num_significant_digits <= 5);
+
+        let largest_value_with_single_unit_resolution = 2_u64 * 10_u64.pow(num_significant_digits);
+
+        let unit_magnitude = ((lowest_discernible_value as f64).ln() / 2_f64.ln()) as u32;
+        let unit_magnitude_mask: u64  = (1_u64 << unit_magnitude) - 1;
+
+        // find nearest power of 2 to largest_value_with_single_unit_resolution
+        let sub_bucket_count_magnitude: u32 =
+        ((largest_value_with_single_unit_resolution as f64).ln() / 2_f64.ln()).ceil() as u32;
+
+        // ugly looking... how should ternaries be done?
+        let sub_bucket_half_count_magnitude: u32 = (if sub_bucket_count_magnitude > 1 { sub_bucket_count_magnitude } else { 1 }) - 1;
+        let sub_bucket_count: usize = 2_usize.pow(sub_bucket_half_count_magnitude + 1);
+        let sub_bucket_half_count: usize = sub_bucket_count / 2;
+        // this cast should be safe; see discussion in buckets_needed_for_value on similar cast
+        let sub_bucket_mask = (sub_bucket_count as u64 - 1) << unit_magnitude;
+
+        let bucket_count = SimpleHdrHistogram::<T>::buckets_needed_for_value(highest_trackable_value, sub_bucket_count, unit_magnitude);
+        let counts_arr_len = SimpleHdrHistogram::<T>::counts_arr_len(bucket_count, sub_bucket_count);
+
+        // this is a small number (0 - 63) so any usize can hold it
+        let leading_zero_count_base: usize = (64_u32 - unit_magnitude - sub_bucket_half_count_magnitude - 1) as usize;
+
+        SimpleHdrHistogram {
+            leading_zeros_count_base: leading_zero_count_base,
+            unit_magnitude: unit_magnitude,
+            sub_bucket_mask: sub_bucket_mask,
+            sub_bucket_count: sub_bucket_count,
+            sub_bucket_half_count: sub_bucket_half_count,
+            sub_bucket_half_count_magnitude: sub_bucket_half_count_magnitude,
+            counts: vec![T::zero(); counts_arr_len],
+            normalizing_index_offset: 0, // 0 for normal Histogram ctor in Java impl
+            min_non_zero_value: u64::max_value(),
+            total_count: 0,
+            max_value: 0,
+            unit_magnitude_mask: unit_magnitude_mask
+        }
+    }
+
+    fn buckets_needed_for_value(value: u64, sub_bucket_count: usize, unit_magnitude: u32) -> usize {
+
+        // sub_bucket_count is 2 * 10^precision, so fairly small and certainly fits in u64.
+        // If unit magnitude is too big, this will panic, but not much we can do about it.
+        // Pretty unlikely to have a large unit_magnitude (you'd need at least 46 to cause the max
+        // sized sub_bucket_count of 2^18 to overflow...)
+        let mut smallest_untrackable_value: u64 = (sub_bucket_count as u64) << unit_magnitude;
+        let mut buckets_needed = 1_usize;
+
+        while smallest_untrackable_value <= value {
+            if smallest_untrackable_value > u64::max_value() / 2 {
+                return buckets_needed + 1;
+            }
+
+            smallest_untrackable_value = smallest_untrackable_value << 1;
+            buckets_needed += 1;
+        }
+
+        return buckets_needed;
+    }
+
+    fn counts_arr_len(bucket_count: usize, sub_bucket_count: usize) -> usize {
+        (bucket_count + 1) * (sub_bucket_count / 2)
+    }
+
     fn value_from_index(&self, index: usize) -> u64 {
         let mut bucket_index = (index as u32 >> self.sub_bucket_half_count_magnitude) - 1;
         let mut sub_bucket_index = (index as u32 & (self.sub_bucket_half_count as u32 - 1)) + self.sub_bucket_half_count as u32;

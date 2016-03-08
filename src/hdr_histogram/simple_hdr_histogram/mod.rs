@@ -36,39 +36,21 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
 }
 
 pub trait HistogramBase<T: HistogramCount> {
-    //TODO this block should be default impl of this trait
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
-    fn counts_array_index(&self, value: u64) -> usize;
-    // in the Java impl, the functions above/below have same name but are overloaded, which
-    //  Rust does not allow, thus the name change
-    fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize;
-    fn get_bucket_index(&self, value: u64) -> usize;
-    fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize;
+
     fn get_count(&self) -> u64;
+    fn get_count_at_value(&self, value: u64) -> Result<T, String>;
+
     fn get_max(&self) -> u64;
     fn get_min_non_zero(&self) -> u64;
-    fn update_min_and_max(&mut self, value: u64);
-    fn update_max_value(&mut self, value: u64);
-    fn update_min_non_zero_value(&mut self, value: u64);
-    fn get_count_at_value(&self, value: u64) -> Result<T, String>;
+    fn get_mean(&self) -> f64;
+
     fn get_value_at_percentile(&self, percentile: f64) -> u64;
-    fn value_from_index(&self, index: usize) -> u64;
-    // in the Java impl, the functions above/below have same name but are overloaded, which
-    //  Rust does not allow, thus the name change
-    fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64;
+
     fn lowest_equivalent_value(&self, value: u64) -> u64;
     fn highest_equivalent_value(&self, value: u64) -> u64;
     fn next_non_equivalent_value(&self, value: u64) -> u64;
     fn size_of_equivalent_value_range(&self, value: u64) -> u64;
-    fn get_mean(&self) -> f64;
-    // end TODO
-
-    fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
-    fn normalize_index(&self, index: usize, normalizing_index_offset: i32, array_length: usize) ->
-        Result<usize, String>;
-    fn increment_total_count(&mut self);
-    fn get_count_at_index(&self, index: usize) -> Result<T, String>;
-
 }
 
 impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
@@ -106,20 +88,6 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         this_value_base_level
     }
 
-    fn value_from_index(&self, index: usize) -> u64 {
-        let mut bucket_index = (index as u32 >> self.sub_bucket_half_count_magnitude) - 1;
-        let mut sub_bucket_index = (index as u32 & (self.sub_bucket_half_count as u32 - 1)) + self.sub_bucket_half_count as u32;
-        if bucket_index < 0 {
-            sub_bucket_index -= self.sub_bucket_half_count as u32;
-            bucket_index = 0;
-        }
-        self.value_from_index_sub(bucket_index as usize, sub_bucket_index as usize)
-    }
-
-    fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64 {
-        (sub_bucket_index as u64) << (bucket_index as u32 + self.unit_magnitude)
-    }
-
     fn get_value_at_percentile(&self, percentile: f64) -> u64 {
         let requested_percentile = percentile.min(100.0);
         let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count() as f64) + 0.5) as u64;
@@ -146,25 +114,10 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         0
     }
 
-    fn get_count_at_index(&self, index: usize) -> Result<T, String> {
-        let normalized_index =
-            self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
-        match normalized_index {
-            Ok(the_index) =>
-                Ok(self.counts[the_index]),
-            Err(err) =>
-                Err(err)
-        }
-    }
-
     fn get_count_at_value(&self, value: u64) -> Result<T, String> {
         // TODO is it ok to just clamp to max value rathe than saying it's inexpressible?
         let index = cmp::min(cmp::max(0, self.counts_array_index(value)), self.counts.len() - 1);
         self.get_count_at_index(index)
-    }
-
-    fn increment_total_count(&mut self) {
-        self.total_count += 1;
     }
 
     fn get_max(&self) -> u64 {
@@ -177,6 +130,54 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn get_count(&self) -> u64 {
         self.total_count
+    }
+
+    fn record_single_value(&mut self, value: u64) -> Result<(), String> {
+        let counts_index = self.counts_array_index(value);
+            match self.increment_count_at_index(counts_index) {
+                Ok(_) => {
+                    self.update_min_and_max(value);
+                    self.increment_total_count();
+                    Ok(())
+                }
+                Err(err) => {
+                    Err(String::from(format!("Could not increment count at index due to: {}", err)))
+                }
+            }
+    }
+
+
+}
+
+impl<T: HistogramCount> SimpleHdrHistogram<T> {
+
+    fn value_from_index(&self, index: usize) -> u64 {
+        let mut bucket_index = (index as u32 >> self.sub_bucket_half_count_magnitude) - 1;
+        let mut sub_bucket_index = (index as u32 & (self.sub_bucket_half_count as u32 - 1)) + self.sub_bucket_half_count as u32;
+        if bucket_index < 0 {
+            sub_bucket_index -= self.sub_bucket_half_count as u32;
+            bucket_index = 0;
+        }
+        self.value_from_index_sub(bucket_index as usize, sub_bucket_index as usize)
+    }
+
+    fn get_count_at_index(&self, index: usize) -> Result<T, String> {
+        let normalized_index =
+        self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
+        match normalized_index {
+            Ok(the_index) =>
+            Ok(self.counts[the_index]),
+            Err(err) =>
+            Err(err)
+        }
+    }
+
+    fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64 {
+        (sub_bucket_index as u64) << (bucket_index as u32 + self.unit_magnitude)
+    }
+
+    fn increment_total_count(&mut self) {
+        self.total_count += 1;
     }
 
     fn update_max_value(&mut self, value: u64) {
@@ -199,20 +200,6 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         if value < self.min_non_zero_value && value != 0 {
             self.update_min_non_zero_value(value);
         }
-    }
-
-    fn record_single_value(&mut self, value: u64) -> Result<(), String> {
-        let counts_index = self.counts_array_index(value);
-            match self.increment_count_at_index(counts_index) {
-                Ok(_) => {
-                    self.update_min_and_max(value);
-                    self.increment_total_count();
-                    Ok(())
-                }
-                Err(err) => {
-                    Err(String::from(format!("Could not increment count at index due to: {}", err)))
-                }
-            }
     }
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String> {
@@ -300,4 +287,3 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         (bucket_base_signed + offset_in_bucket) as usize
     }
 }
-

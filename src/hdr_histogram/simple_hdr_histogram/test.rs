@@ -222,6 +222,18 @@ fn counts_array_index_sub_second_bucket_last_entry() {
 }
 
 #[test]
+fn counts_array_index_second_bucket_last_entry() {
+    let h = init_histo(1, 100000, 3);
+    assert_eq!(2048 + 1023, h.counts_array_index(4095));
+}
+
+#[test]
+fn counts_array_index_second_bucket_first_entry() {
+    let h = init_histo(1, 100000, 3);
+    assert_eq!(2048, h.counts_array_index(2048));
+}
+
+#[test]
 fn normalize_index_zero_offset_doesnt_change_index() {
     let h = init_histo(1, 100000, 3);
 

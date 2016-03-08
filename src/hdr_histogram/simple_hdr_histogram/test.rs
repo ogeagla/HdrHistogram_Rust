@@ -190,29 +190,6 @@ fn get_max_empty() {
 }
 
 #[test]
-fn can_record_single_value() {
-    let mut h = histo64(1, 100_000, 3);
-    h.record_single_value(5000).unwrap();
-}
-
-#[test]
-fn can_compute_indexes_for_smallest_value() {
-    let h = histo64(1, 100_000, 3);
-    let value = 1;
-    assert_eq!(0, h.get_bucket_index(value));
-    assert_eq!(1, h.get_sub_bucket_index(value, 0));
-    assert_eq!(1, h.counts_array_index(value));
-}
-
-#[test]
-fn can_compute_counts_array_index() {
-    let h = histo64(1, 100_000, 3);
-    let result = h.counts_array_index(5000);
-
-    assert_eq!(3298, result);
-}
-
-#[test]
 fn get_bucket_index_smallest_value_in_first_bucket() {
     let h = histo64(1, 100_000, 3);
     assert_eq!(0, h.get_bucket_index(0))

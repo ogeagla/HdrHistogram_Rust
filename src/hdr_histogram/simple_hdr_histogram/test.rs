@@ -407,7 +407,6 @@ fn counts_array_index_below_smallest() {
     assert_eq!(0, h.counts_array_index(512));
 }
 
-
 #[test]
 fn counts_array_index_way_past_largest_value_exceeds_length() {
     let h = init_histo(1, 100_000, 3);
@@ -419,6 +418,9 @@ fn counts_array_index_way_past_largest_value_exceeds_length() {
     // Start index is (bucket index + 1) * 1024.
     assert_eq!(1024 * (30 + 1), h.counts_array_index(1 << 40));
 }
+
+// TODO tests on disambiguating values past the stated max value but still capable of being
+// expressed at the top of the top bucket, incl updating the max
 
 #[test]
 fn normalize_index_zero_offset_doesnt_change_index() {

@@ -164,7 +164,7 @@ fn get_sub_bucket_index_largest_value_in_first_bucket() {
 }
 
 #[test]
-fn get_sub_bucket_index_smalles_value_in_second_bucket() {
+fn get_sub_bucket_index_smallest_value_in_second_bucket() {
     let h = init_histo(1, 100000, 3);
     let value = 2048;
 
@@ -219,6 +219,49 @@ fn counts_array_index_sub_second_bucket_first_entry() {
 fn counts_array_index_sub_second_bucket_last_entry() {
     let h = init_histo(1, 100000, 3);
     assert_eq!(2048 + 1023, h.counts_array_index_sub(1, 2047));
+}
+
+#[test]
+fn normalize_index_zero_offset_doesnt_change_index() {
+    let h = init_histo(1, 100000, 3);
+
+    assert_eq!(1234, h.normalize_index(1234, 0, h.counts.len()).unwrap())
+}
+
+#[test]
+fn normalize_index_simple() {
+    let h = init_histo(1, 100000, 3);
+    let i = h.counts_array_index(4096);
+
+    // end of second bucket
+    assert_eq!(3072, i);
+    // equivalent of one right shift. This will not lead to either over or underflow in index
+    // normalization.
+    assert_eq!(2048, h.normalize_index(i, 1024, h.counts.len()).unwrap())
+}
+
+#[test]
+fn normalize_index_negative_intermediate() {
+    let h = init_histo(1, 5000, 3);
+    let i = h.counts_array_index(1500);
+
+    // upper half of first bucket
+    assert_eq!(1500, i);
+    // equivalent of two right shift. This goes negative and has length added back in.
+    assert_eq!(1500 - 2048 + 4096,
+        h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
+}
+
+#[test]
+fn normalize_index_oversized_intermediate() {
+    let h = init_histo(1, 5000, 3);
+    let i = h.counts_array_index(4096);
+
+    // upper half of first bucket
+    assert_eq!(3072, i);
+    // equivalent of two left shift. This exceeds array length and has length subtracted.
+    assert_eq!(3072 + 2048 - 4096,
+        h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
 }
 
 #[test]
@@ -321,8 +364,8 @@ fn buckets_needed_for_value_med_unit_magnitude_2() {
 #[test]
 fn buckets_needed_for_value_big() {
     // should hit the case where it detects impending overflow
-    // 2^51 * 2048 == 2^62, so that's 52 buckets, + 1 more to reach the +1 in the value
-    assert_eq!(53, buckets_needed_for_value((1_u64 << 62) + 1, 2048_usize, 0));
+    // 2^53 * 2048 == 2^64, so that's 54 buckets (2^0 to 2^53)
+    assert_eq!(54, buckets_needed_for_value((1_u64 << 63), 2048_usize, 0));
 }
 
 #[test]
@@ -405,7 +448,7 @@ fn init_histo(lowest_discernible_value: u64, highest_trackable_value: u64, num_s
         sub_bucket_half_count: sub_bucket_half_count,
         sub_bucket_half_count_magnitude: sub_bucket_half_count_magnitude,
         counts: vec![0; counts_arr_len],
-        normalizing_index_offset: 0_usize, // 0 for normal Histogram ctor in Java impl
+        normalizing_index_offset: 0, // 0 for normal Histogram ctor in Java impl
         min_non_zero_value: u64::max_value(),
         total_count: 0,
         max_value: 0,

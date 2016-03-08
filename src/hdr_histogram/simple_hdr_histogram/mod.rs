@@ -27,7 +27,8 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
     sub_bucket_half_count: usize,
     sub_bucket_half_count_magnitude: u32,
     counts: Vec<T>,
-    normalizing_index_offset: usize,
+    // is at most counts.len(), so i32 is plenty since counts scales exponentially
+    normalizing_index_offset: i32,
     max_value: u64,
     min_non_zero_value: u64,
     unit_magnitude_mask: u64,
@@ -62,7 +63,7 @@ pub trait HistogramBase<T: HistogramCount> {
     // end TODO
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String>;
-    fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
+    fn normalize_index(&self, index: usize, normalizing_index_offset: i32, array_length: usize) ->
         Result<usize, String>;
     fn increment_total_count(&mut self);
     fn get_count_at_index(&self, index: usize) -> Result<T, String>;
@@ -186,7 +187,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         }
     }
 
-    fn normalize_index(&self, index: usize, normalizing_index_offset: usize, array_length: usize) ->
+    fn normalize_index(&self, index: usize, normalizing_index_offset: i32, array_length: usize) ->
         Result<usize, String> {
         match normalizing_index_offset {
             0 => Ok(index),
@@ -194,11 +195,26 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
                 if index > array_length {
                     Err(String::from("index out of covered range"))
                 } else {
-                    let mut normalized_index: usize = index - normalizing_index_offset;
-                    if normalized_index >= array_length {
-                        normalized_index -=array_length;
+                    // indices are always pretty small since they scale to values exponentially
+                    let array_length_i32 : i32 = array_length as i32;
+                    let mut normalized_index: i32 = index as i32 - normalizing_index_offset;
+
+                    // Calculate unsigned remainder.
+                    // When offset is positive (right shifted), it's checked at the time of the
+                    // right shift op to not shift anything into the bottom half of the first
+                    // bucket or below. Therefore, we know that the offset is less than array
+                    // length. So, we can simply check for sum < 0 and add one array length.
+                    // When offset is negative (left shifted), it's also checked at left shift time
+                    // to ensure it won't cause anything to be shifted past the end of the array.
+                    // Similarly, we know that |offset| < array length, so if sum > array length,
+                    // we can just subtract 1 array length.
+                    if normalized_index < 0 {
+                        normalized_index += array_length_i32
+                    } else if normalized_index >= array_length_i32 {
+                        normalized_index -= array_length_i32
                     }
-                    Ok(normalized_index)
+
+                    Ok(normalized_index as usize)
                 }
         }
     }

@@ -166,6 +166,18 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         self.total_count += 1;
     }
 
+    fn get_max(&self) -> u64 {
+        self.max_value
+    }
+
+    fn get_min_non_zero(&self) -> u64 {
+        self.min_non_zero_value
+    }
+
+    fn get_count(&self) -> u64 {
+        self.total_count
+    }
+
     fn update_max_value(&mut self, value: u64) {
         let internal_value = value | self.unit_magnitude_mask;
         self.max_value = internal_value;
@@ -188,61 +200,6 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         }
     }
 
-    fn normalize_index(&self, index: usize, normalizing_index_offset: i32, array_length: usize) ->
-        Result<usize, String> {
-        match normalizing_index_offset {
-            0 => Ok(index),
-            _ =>
-                if index > array_length {
-                    Err(String::from("index out of covered range"))
-                } else {
-                    // indices are always pretty small since they scale to values exponentially
-                    let array_length_i32 : i32 = array_length as i32;
-                    let mut normalized_index: i32 = index as i32 - normalizing_index_offset;
-
-                    // Calculate unsigned remainder.
-                    // When offset is positive (right shifted), it's checked at the time of the
-                    // right shift op to not shift anything into the bottom half of the first
-                    // bucket or below. Therefore, we know that the offset is less than array
-                    // length. So, we can simply check for sum < 0 and add one array length.
-                    // When offset is negative (left shifted), it's also checked at left shift time
-                    // to ensure it won't cause anything to be shifted past the end of the array.
-                    // Similarly, we know that |offset| < array length, so if sum > array length,
-                    // we can just subtract 1 array length.
-                    if normalized_index < 0 {
-                        normalized_index += array_length_i32
-                    } else if normalized_index >= array_length_i32 {
-                        normalized_index -= array_length_i32
-                    }
-
-                    Ok(normalized_index as usize)
-                }
-        }
-    }
-
-    fn increment_count_at_index(&mut self, index: usize) -> Result<(), String> {
-        let normalized_index =
-            self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
-        match normalized_index {
-            Ok(the_index) => {
-                self.counts[the_index] = self.counts[the_index] + T::one();
-                Ok(())
-            }
-            Err(err) =>
-                Err(err)
-        }
-    }
-
-    fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize {
-        // safe cast: sub bucket indexes are at most 2 * 10^precision, so can fit in usize.
-        (value >> (bucket_index as u32 + self.unit_magnitude)) as usize
-    }
-
-    fn get_bucket_index(&self, value: u64) -> usize {
-        let value_orred = value | self.sub_bucket_mask;
-        self.leading_zeros_count_base - (value_orred.leading_zeros() as usize)
-    }
-
     fn record_single_value(&mut self, value: u64) -> Result<(), String> {
         let counts_index = self.counts_array_index(value);
             match self.increment_count_at_index(counts_index) {
@@ -257,22 +214,65 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
             }
     }
 
-    fn get_max(&self) -> u64 {
-        self.max_value
+    fn increment_count_at_index(&mut self, index: usize) -> Result<(), String> {
+        let normalized_index =
+        self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
+        match normalized_index {
+            Ok(the_index) => {
+                self.counts[the_index] = self.counts[the_index] + T::one();
+                Ok(())
+            }
+            Err(err) =>
+            Err(err)
+        }
     }
 
-    fn get_min_non_zero(&self) -> u64 {
-        self.min_non_zero_value
-    }
+    fn normalize_index(&self, index: usize, normalizing_index_offset: i32, array_length: usize) ->
+    Result<usize, String> {
+        match normalizing_index_offset {
+            0 => Ok(index),
+            _ =>
+            if index > array_length {
+                Err(String::from("index out of covered range"))
+            } else {
+                // indices are always pretty small since they scale to values exponentially
+                let array_length_i32 : i32 = array_length as i32;
+                let mut normalized_index: i32 = index as i32 - normalizing_index_offset;
 
-    fn get_count(&self) -> u64 {
-        self.total_count
+                // Calculate unsigned remainder.
+                // When offset is positive (right shifted), it's checked at the time of the
+                // right shift op to not shift anything into the bottom half of the first
+                // bucket or below. Therefore, we know that the offset is less than array
+                // length. So, we can simply check for sum < 0 and add one array length.
+                // When offset is negative (left shifted), it's also checked at left shift time
+                // to ensure it won't cause anything to be shifted past the end of the array.
+                // Similarly, we know that |offset| < array length, so if sum > array length,
+                // we can just subtract 1 array length.
+                if normalized_index < 0 {
+                    normalized_index += array_length_i32
+                } else if normalized_index >= array_length_i32 {
+                    normalized_index -= array_length_i32
+                }
+
+                Ok(normalized_index as usize)
+            }
+        }
     }
 
     fn counts_array_index(&self, value: u64) -> usize {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
         return self.counts_array_index_sub(bucket_index, sub_bucket_index);
+    }
+
+    fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize {
+        // safe cast: sub bucket indexes are at most 2 * 10^precision, so can fit in usize.
+        (value >> (bucket_index as u32 + self.unit_magnitude)) as usize
+    }
+
+    fn get_bucket_index(&self, value: u64) -> usize {
+        let value_orred = value | self.sub_bucket_mask;
+        self.leading_zeros_count_base - (value_orred.leading_zeros() as usize)
     }
 
     fn counts_array_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> usize {

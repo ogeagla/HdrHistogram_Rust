@@ -46,6 +46,7 @@ pub trait HistogramBase<T: HistogramCount> {
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize;
     fn get_count(&self) -> u64;
     fn get_max(&self) -> u64;
+    fn get_min_non_zero(&self) -> u64;
     fn update_min_and_max(&mut self, value: u64);
     fn update_max_value(&mut self, value: u64);
     fn update_min_non_zero_value(&mut self, value: u64);
@@ -258,6 +259,10 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn get_max(&self) -> u64 {
         self.max_value
+    }
+
+    fn get_min_non_zero(&self) -> u64 {
+        self.min_non_zero_value
     }
 
     fn get_count(&self) -> u64 {

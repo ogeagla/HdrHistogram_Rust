@@ -47,11 +47,68 @@ fn get_count_empty() {
 }
 
 #[test]
+fn get_min_non_zero_empty() {
+    let mut h = init_histo(1, 100000, 3);
+
+    assert_eq!(u64::max_value(), h.get_min_non_zero());
+}
+
+#[test]
+fn get_min_non_zero_after_record_0() {
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(0).unwrap();
+
+    assert_eq!(u64::max_value(), h.get_min_non_zero());
+}
+
+#[test]
+fn get_min_non_zero_after_record() {
+    let mut h = init_histo(1, 100000, 3);
+    h.record_single_value(3).unwrap();
+
+    assert_eq!(3, h.get_min_non_zero());
+}
+
+#[test]
+fn get_min_non_zero_after_record_below_unit_magnitude_2() {
+    let mut h = init_histo(4, 100000, 3);
+    h.record_single_value(3).unwrap();
+
+    assert_eq!(u64::max_value(), h.get_min_non_zero());
+}
+
+
+#[test]
+fn get_min_non_zero_after_record_at_unit_magnitude_2() {
+    let mut h = init_histo(4, 100000, 3);
+    h.record_single_value(4).unwrap();
+
+    assert_eq!(4, h.get_min_non_zero());
+}
+
+#[test]
+fn get_min_non_zero_after_record_above_unit_magnitude_2() {
+    let mut h = init_histo(4, 100000, 3);
+    h.record_single_value(5).unwrap();
+
+    assert_eq!(4, h.get_min_non_zero());
+}
+
+#[test]
 fn get_max_after_record() {
     let mut h = init_histo(1, 100000, 3);
     h.record_single_value(5000).unwrap();
 
     assert_eq!(5000, h.get_max());
+}
+
+#[test]
+fn get_max_after_record_unit_magnitude_2() {
+    let mut h = init_histo(4, 100000, 3);
+    h.record_single_value(5000).unwrap();
+
+    assert_eq!(3, h.unit_magnitude_mask);
+    assert_eq!(5003, h.get_max());
 }
 
 #[test]

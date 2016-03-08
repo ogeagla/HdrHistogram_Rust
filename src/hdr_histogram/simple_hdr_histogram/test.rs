@@ -2,27 +2,58 @@ use hdr_histogram::simple_hdr_histogram::*;
 
 #[test]
 fn count_at_value_on_empty() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
 
     assert_eq!(0, h.get_count_at_value(1).unwrap());
     assert_eq!(0, h.get_count_at_value(5000).unwrap());
-    assert_eq!(0, h.get_count_at_value(100000).unwrap());
+    assert_eq!(0, h.get_count_at_value(100_000).unwrap());
 }
 
 #[test]
 fn count_at_value_after_record() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
 
     h.record_single_value(5000).unwrap();
 
     assert_eq!(0, h.get_count_at_value(1).unwrap());
     assert_eq!(1, h.get_count_at_value(5000).unwrap());
-    assert_eq!(0, h.get_count_at_value(100000).unwrap());
+    assert_eq!(0, h.get_count_at_value(100_000).unwrap());
+}
+
+#[test]
+fn get_count_at_value_value_below_min() {
+    let mut h = init_histo(1024, 100_000, 3);
+
+    h.record_single_value(1).unwrap();
+
+    assert_eq!(10, h.unit_magnitude);
+    assert_eq!(1023, h.unit_magnitude_mask);
+    assert_eq!(43, h.leading_zeros_count_base);
+
+    // maps to bucket 0, sub bucket index 0
+    assert_eq!(1, h.get_count_at_value(1).unwrap());
+    // maps to b 0, sb 0
+    assert_eq!(1, h.get_count_at_value(1023).unwrap());
+    assert_eq!(0, h.get_count_at_value(1024).unwrap());
+    assert_eq!(0, h.get_count_at_value(100_000).unwrap());
+}
+
+#[test]
+fn get_count_at_value_value_above_max() {
+    let mut h = init_histo(1, 100_000, 3);
+
+    // top of 6th bucket is 2^6 * 2047
+    h.record_single_value(2047 * 64).unwrap();
+
+    assert_eq!(1, h.get_count_at_value(2047 * 64).unwrap());
+    // much bigger value is clamped
+    assert_eq!(1, h.get_count_at_value(100_000_000_000).unwrap());
+
 }
 
 #[test]
 fn get_count_after_record() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(5000).unwrap();
 
     assert_eq!(1, h.get_count());
@@ -30,7 +61,7 @@ fn get_count_after_record() {
 
 #[test]
 fn get_count_after_record_twice() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(5000).unwrap();
     h.record_single_value(5001).unwrap();
 
@@ -39,23 +70,22 @@ fn get_count_after_record_twice() {
 
 #[test]
 fn get_count_empty() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(5000).unwrap();
 
-    let count = h.get_count();
-    assert_eq!(1, count);
+    assert_eq!(1, h.get_count());
 }
 
 #[test]
 fn get_min_non_zero_empty() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
 
     assert_eq!(u64::max_value(), h.get_min_non_zero());
 }
 
 #[test]
 fn get_min_non_zero_after_record_0() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(0).unwrap();
 
     assert_eq!(u64::max_value(), h.get_min_non_zero());
@@ -63,7 +93,7 @@ fn get_min_non_zero_after_record_0() {
 
 #[test]
 fn get_min_non_zero_after_record() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(3).unwrap();
 
     assert_eq!(3, h.get_min_non_zero());
@@ -71,7 +101,7 @@ fn get_min_non_zero_after_record() {
 
 #[test]
 fn get_min_non_zero_after_record_below_unit_magnitude_2() {
-    let mut h = init_histo(4, 100000, 3);
+    let mut h = init_histo(4, 100_000, 3);
     h.record_single_value(3).unwrap();
 
     assert_eq!(u64::max_value(), h.get_min_non_zero());
@@ -80,7 +110,7 @@ fn get_min_non_zero_after_record_below_unit_magnitude_2() {
 
 #[test]
 fn get_min_non_zero_after_record_at_unit_magnitude_2() {
-    let mut h = init_histo(4, 100000, 3);
+    let mut h = init_histo(4, 100_000, 3);
     h.record_single_value(4).unwrap();
 
     assert_eq!(4, h.get_min_non_zero());
@@ -88,7 +118,7 @@ fn get_min_non_zero_after_record_at_unit_magnitude_2() {
 
 #[test]
 fn get_min_non_zero_after_record_above_unit_magnitude_2() {
-    let mut h = init_histo(4, 100000, 3);
+    let mut h = init_histo(4, 100_000, 3);
     h.record_single_value(5).unwrap();
 
     assert_eq!(4, h.get_min_non_zero());
@@ -96,7 +126,7 @@ fn get_min_non_zero_after_record_above_unit_magnitude_2() {
 
 #[test]
 fn get_max_after_record() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(5000).unwrap();
 
     assert_eq!(5000, h.get_max());
@@ -104,7 +134,7 @@ fn get_max_after_record() {
 
 #[test]
 fn get_max_after_record_unit_magnitude_2() {
-    let mut h = init_histo(4, 100000, 3);
+    let mut h = init_histo(4, 100_000, 3);
     h.record_single_value(5000).unwrap();
 
     assert_eq!(3, h.unit_magnitude_mask);
@@ -113,7 +143,7 @@ fn get_max_after_record_unit_magnitude_2() {
 
 #[test]
 fn get_max_record_smaller_value_doesnt_update_max() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(5000).unwrap();
     h.record_single_value(2000).unwrap();
 
@@ -122,20 +152,20 @@ fn get_max_record_smaller_value_doesnt_update_max() {
 
 #[test]
 fn get_max_empty() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
 
     assert_eq!(0, h.get_max());
 }
 
 #[test]
 fn can_record_single_value() {
-    let mut h = init_histo(1, 100000, 3);
+    let mut h = init_histo(1, 100_000, 3);
     h.record_single_value(5000).unwrap();
 }
 
 #[test]
 fn can_compute_indexes_for_smallest_value() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let value = 1;
     assert_eq!(0, h.get_bucket_index(value));
     assert_eq!(1, h.get_sub_bucket_index(value, 0));
@@ -144,7 +174,7 @@ fn can_compute_indexes_for_smallest_value() {
 
 #[test]
 fn can_compute_counts_array_index() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let result = h.counts_array_index(5000);
 
     assert_eq!(3298, result);
@@ -152,47 +182,68 @@ fn can_compute_counts_array_index() {
 
 #[test]
 fn get_bucket_index_smallest_value_in_first_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(0, h.get_bucket_index(0))
 }
 
 #[test]
 fn get_bucket_index_biggest_value_in_first_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     // sub bucket size 2048, and first bucket uses all 2048 slots
     assert_eq!(0, h.get_bucket_index(2047))
 }
 
 #[test]
 fn get_bucket_index_smallest_value_in_second_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(1, h.get_bucket_index(2048))
 }
 
 #[test]
 fn get_bucket_index_biggest_value_in_second_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     // second value uses only 1024 slots, but scales by 2
     assert_eq!(1, h.get_bucket_index(4095))
 }
 
 #[test]
 fn get_bucket_index_smallest_value_in_third_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(2, h.get_bucket_index(4096))
 }
 
 #[test]
 fn get_bucket_index_smallest_value_in_last_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
 
     // 7 buckets total
     assert_eq!(6, h.get_bucket_index(65536))
 }
 
 #[test]
+fn get_bucket_index_value_below_smallest_clamps_to_zero() {
+    let h = init_histo(1024, 100_000, 3);
+
+    // masking clamps bucket index to 0
+    assert_eq!(0, h.get_bucket_index(0));
+    assert_eq!(0, h.get_bucket_index(1));
+    assert_eq!(0, h.get_bucket_index(1023));
+    assert_eq!(0, h.get_bucket_index(1024))
+}
+
+#[test]
+fn get_bucket_index_value_above_biggest_isnt_clamped_at_max_bucket() {
+    let h = init_histo(1, 100_000, 3);
+
+    assert_eq!(6, h.get_bucket_index(100_000));
+    // not clamped; it's just got fewer leading zeros...
+    // 2048 * 2^26 = 137,438,953,472
+    assert_eq!(26, h.get_bucket_index(100_000_000_000));
+}
+
+#[test]
 fn get_sub_bucket_index_zero_value_in_first_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     // below min distinguishable value, but still gets bucketed into 0
     let value = 0;
     assert_eq!(0, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
@@ -200,14 +251,14 @@ fn get_sub_bucket_index_zero_value_in_first_bucket() {
 
 #[test]
 fn get_sub_bucket_index_smallest_distinguishable_value_in_first_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let value = 1;
     assert_eq!(1, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
 }
 
 #[test]
 fn get_sub_bucket_index_zero_value_in_first_bucket_unit_magnitude_2() {
-    let h = init_histo(4, 100000, 3);
+    let h = init_histo(4, 100_000, 3);
     let value = 0;
     assert_eq!(2, h.unit_magnitude);
     assert_eq!(0, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
@@ -215,7 +266,7 @@ fn get_sub_bucket_index_zero_value_in_first_bucket_unit_magnitude_2() {
 
 #[test]
 fn get_sub_bucket_index_smaller_than_distinguishable_value_in_first_bucket_unit_magnitude_2() {
-    let h = init_histo(4, 100000, 3);
+    let h = init_histo(4, 100_000, 3);
     let value = 3;
     assert_eq!(2, h.unit_magnitude);
     assert_eq!(0, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
@@ -223,7 +274,7 @@ fn get_sub_bucket_index_smaller_than_distinguishable_value_in_first_bucket_unit_
 
 #[test]
 fn get_sub_bucket_index_smallest_distinguishable_value_in_first_bucket_unit_magnitude_2() {
-    let h = init_histo(4, 100000, 3);
+    let h = init_histo(4, 100_000, 3);
     let value = 4;
     assert_eq!(2, h.unit_magnitude);
     assert_eq!(1, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
@@ -231,7 +282,7 @@ fn get_sub_bucket_index_smallest_distinguishable_value_in_first_bucket_unit_magn
 
 #[test]
 fn get_sub_bucket_index_largest_value_in_first_bucket_unit_magnitude_2() {
-    let h = init_histo(4, 100000, 3);
+    let h = init_histo(4, 100_000, 3);
     let value = 2048 * 4 - 1;
     assert_eq!(2, h.unit_magnitude);
     assert_eq!(2047, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
@@ -239,7 +290,7 @@ fn get_sub_bucket_index_largest_value_in_first_bucket_unit_magnitude_2() {
 
 #[test]
 fn get_sub_bucket_index_smallest_value_in_second_bucket_unit_magnitude_2() {
-    let h = init_histo(4, 100000, 3);
+    let h = init_histo(4, 100_000, 3);
     let value = 2048 * 4;
     assert_eq!(2, h.unit_magnitude);
     assert_eq!(1024, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
@@ -247,14 +298,14 @@ fn get_sub_bucket_index_smallest_value_in_second_bucket_unit_magnitude_2() {
 
 #[test]
 fn get_sub_bucket_index_largest_value_in_first_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let value = 2047;
     assert_eq!(2047, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
 }
 
 #[test]
 fn get_sub_bucket_index_smallest_value_in_second_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let value = 2048;
 
     // at midpoint of bucket, which is the first position actually used in second bucket
@@ -263,7 +314,7 @@ fn get_sub_bucket_index_smallest_value_in_second_bucket() {
 
 #[test]
 fn get_sub_bucket_index_biggest_value_in_second_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let value = 4095;
 
     // at endpoint of bucket, which is the last position actually used in second bucket
@@ -272,33 +323,60 @@ fn get_sub_bucket_index_biggest_value_in_second_bucket() {
 
 #[test]
 fn get_sub_bucket_index_smallest_value_in_third_bucket() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let value = 4096;
 
     assert_eq!(1024, h.get_sub_bucket_index(value, h.get_bucket_index(value)))
 }
 
 #[test]
+fn get_sub_bucket_index_value_below_smallest_clamps_to_zero() {
+    let h = init_histo(1024, 100_000, 3);
+
+    // masking clamps bucket index to 0
+    assert_eq!(0, h.get_sub_bucket_index(0, 0));
+    assert_eq!(0, h.get_sub_bucket_index(1, 0));
+    assert_eq!(0, h.get_sub_bucket_index(1023, 0));
+    assert_eq!(1, h.get_sub_bucket_index(1024, 0))
+}
+
+#[test]
+fn get_sub_bucket_index_value_above_biggest_doesnt_freak_out() {
+    let h = init_histo(1, 1024 * 1024, 3);
+
+    // normal case:
+    // in bucket index 6, scales by 2^6 = 64, start is at 65536.
+    // 100_000 - 65536 = 34_464. 34464 / 64 = 538.5. +1024 = 1562
+    assert_eq!(1562, h.get_sub_bucket_index(100_000, h.get_bucket_index(100_000)));
+
+    // still in sub bucket count but nonsensical
+    // In bucket 26, effective start is 1024 * 2^26 = 68,719,476,736.
+    // 100b - start = 31,280,523,264. That / 2^26 = 466.1.
+    assert_eq!(466 + 1024, h.get_sub_bucket_index(100_000_000_000, h.get_bucket_index(100_000_000_000)));
+}
+
+
+#[test]
 fn counts_array_index_sub_first_bucket_first_entry() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(0, h.counts_array_index_sub(0, 0));
 }
 
 #[test]
 fn counts_array_index_sub_first_bucket_first_distinguishable_entry() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(1, h.counts_array_index_sub(0, 1));
 }
 
 #[test]
 fn counts_array_index_sub_first_bucket_last_entry() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(2047, h.counts_array_index_sub(0, 2047));
 }
 
 #[test]
 fn counts_array_index_sub_second_bucket_first_entry() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     // halfway thru bucket, but bottom half is ignored on non-first bucket, so ends up at end of
     // first bucket + 1
     assert_eq!(2048, h.counts_array_index_sub(1, 1024));
@@ -306,32 +384,52 @@ fn counts_array_index_sub_second_bucket_first_entry() {
 
 #[test]
 fn counts_array_index_sub_second_bucket_last_entry() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(2048 + 1023, h.counts_array_index_sub(1, 2047));
 }
 
 #[test]
 fn counts_array_index_second_bucket_last_entry() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(2048 + 1023, h.counts_array_index(4095));
 }
 
 #[test]
 fn counts_array_index_second_bucket_first_entry() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     assert_eq!(2048, h.counts_array_index(2048));
 }
 
 #[test]
+fn counts_array_index_below_smallest() {
+    let h = init_histo(1024, 100_000, 3);
+
+    assert_eq!(0, h.counts_array_index(512));
+}
+
+
+#[test]
+fn counts_array_index_way_past_largest_value_exceeds_length() {
+    let h = init_histo(1, 100_000, 3);
+
+    // 7 * 1024 + 1 more 1024
+    assert_eq!(8 * 1024, h.counts.len());
+
+    // 2^39 = 1024 * 2^29, so this should be the start of the 30th bucket.
+    // Start index is (bucket index + 1) * 1024.
+    assert_eq!(1024 * (30 + 1), h.counts_array_index(1 << 40));
+}
+
+#[test]
 fn normalize_index_zero_offset_doesnt_change_index() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
 
     assert_eq!(1234, h.normalize_index(1234, 0, h.counts.len()).unwrap())
 }
 
 #[test]
 fn normalize_index_simple() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
     let i = h.counts_array_index(4096);
 
     // end of second bucket
@@ -367,7 +465,7 @@ fn normalize_index_oversized_intermediate() {
 
 #[test]
 fn init_sub_bucket_count_medium_precision() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
 
     assert_eq!(2048_usize, h.sub_bucket_count);
     assert_eq!(1024_usize, h.sub_bucket_half_count);
@@ -377,7 +475,7 @@ fn init_sub_bucket_count_medium_precision() {
 
 #[test]
 fn init_sub_bucket_count_min_precision() {
-    let h = init_histo(1, 100000, 0);
+    let h = init_histo(1, 100_000, 0);
 
     assert_eq!(2_usize, h.sub_bucket_count);
     assert_eq!(1_usize, h.sub_bucket_half_count);
@@ -387,7 +485,7 @@ fn init_sub_bucket_count_min_precision() {
 
 #[test]
 fn init_sub_bucket_count_max_precision() {
-    let h = init_histo(1, 100000, 5);
+    let h = init_histo(1, 100_000, 5);
 
     assert_eq!(262144_usize, h.sub_bucket_count);
     assert_eq!(131072usize, h.sub_bucket_half_count);
@@ -397,7 +495,7 @@ fn init_sub_bucket_count_max_precision() {
 
 #[test]
 fn init_sub_bucket_count_medium_precision_unit_magnitude_2() {
-    let h = init_histo(4, 100000, 3);
+    let h = init_histo(4, 100_000, 3);
 
     assert_eq!(2048_usize, h.sub_bucket_count);
     assert_eq!(1024_usize, h.sub_bucket_half_count);
@@ -407,7 +505,7 @@ fn init_sub_bucket_count_medium_precision_unit_magnitude_2() {
 
 #[test]
 fn init_unit_magnitude_mask_1() {
-    let h = init_histo(1, 100000, 0);
+    let h = init_histo(1, 100_000, 0);
 
     assert_eq!(0, h.unit_magnitude);
     assert_eq!(0, h.unit_magnitude_mask);
@@ -415,7 +513,7 @@ fn init_unit_magnitude_mask_1() {
 
 #[test]
 fn init_unit_magnitude_mask_2() {
-    let h = init_histo(2, 100000, 0);
+    let h = init_histo(2, 100_000, 0);
 
     assert_eq!(1, h.unit_magnitude);
     assert_eq!(1, h.unit_magnitude_mask);
@@ -423,7 +521,7 @@ fn init_unit_magnitude_mask_2() {
 
 #[test]
 fn init_unit_magnitude_mask_3() {
-    let h = init_histo(3, 100000, 0);
+    let h = init_histo(3, 100_000, 0);
 
     assert_eq!(1, h.unit_magnitude);
     assert_eq!(1, h.unit_magnitude_mask);
@@ -431,7 +529,7 @@ fn init_unit_magnitude_mask_3() {
 
 #[test]
 fn init_unit_magnitude_mask_4() {
-    let h = init_histo(4, 100000, 0);
+    let h = init_histo(4, 100_000, 0);
 
     assert_eq!(2, h.unit_magnitude);
     assert_eq!(3, h.unit_magnitude_mask);
@@ -439,7 +537,7 @@ fn init_unit_magnitude_mask_4() {
 
 #[test]
 fn init_unit_magnitude_mask_1000() {
-    let h = init_histo(1000, 100000, 0);
+    let h = init_histo(1000, 100_000, 0);
 
     assert_eq!(9, h.unit_magnitude);
     assert_eq!(511, h.unit_magnitude_mask);
@@ -452,14 +550,14 @@ fn buckets_needed_for_value_small() {
 
 #[test]
 fn buckets_needed_for_value_med() {
-    // 2048 * 2^6 > 100000, so 7 buckets total
-    assert_eq!(7, buckets_needed_for_value(100000, 2048_usize, 0));
+    // 2048 * 2^6 > 100_000, so 7 buckets total
+    assert_eq!(7, buckets_needed_for_value(100_000, 2048_usize, 0));
 }
 
 #[test]
 fn buckets_needed_for_value_med_unit_magnitude_2() {
-    // (2048 << 2) * 2^4 > 100000, so 5 buckets total
-    assert_eq!(5, buckets_needed_for_value(100000, 2048_usize, 2));
+    // (2048 << 2) * 2^4 > 100_000, so 5 buckets total
+    assert_eq!(5, buckets_needed_for_value(100_000, 2048_usize, 2));
 }
 
 #[test]
@@ -492,7 +590,7 @@ fn init_count_array_len_3_bucket() {
 
 #[test]
 fn init_leading_zero_count_base() {
-    let h = init_histo(1, 100000, 3);
+    let h = init_histo(1, 100_000, 3);
 
     assert_eq!(10, h.sub_bucket_half_count_magnitude);
     assert_eq!(0, h.unit_magnitude);
@@ -501,7 +599,7 @@ fn init_leading_zero_count_base() {
 
 #[test]
 fn init_leading_zero_count_base_unit_magnitude_2() {
-    let h = init_histo(4, 100000, 3);
+    let h = init_histo(4, 100_000, 3);
 
     assert_eq!(10, h.sub_bucket_half_count_magnitude);
     assert_eq!(2, h.unit_magnitude);

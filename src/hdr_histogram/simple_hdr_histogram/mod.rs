@@ -158,6 +158,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
     }
 
     fn get_count_at_value(&self, value: u64) -> Result<T, String> {
+        // TODO is it ok to just clamp to max value rathe than saying it's inexpressible?
         let index = cmp::min(cmp::max(0, self.counts_array_index(value)), self.counts.len() - 1);
         self.get_count_at_index(index)
     }
@@ -219,6 +220,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
         match normalized_index {
             Ok(the_index) => {
+                // TODO express exceeding the counts size as an error here?
                 self.counts[the_index] = self.counts[the_index] + T::one();
                 Ok(())
             }
@@ -267,6 +269,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize {
         // safe cast: sub bucket indexes are at most 2 * 10^precision, so can fit in usize.
+        // bucket_indexes are even smaller, so can certainly fit in u32.
         (value >> (bucket_index as u32 + self.unit_magnitude)) as usize
     }
 

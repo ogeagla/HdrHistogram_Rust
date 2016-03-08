@@ -48,6 +48,38 @@ fn get_count_at_value_value_above_max() {
     assert_eq!(1, h.get_count_at_value(2047 * 64).unwrap());
     // much bigger value is clamped
     assert_eq!(1, h.get_count_at_value(100_000_000_000).unwrap());
+}
+
+#[test]
+fn get_count_at_value_after_record_into_top_of_top_bucket_past_stated_max() {
+    // this will fit inside 2048 * 2^6, so 7 buckets.
+    let mut h = init_histo(1, 100_000, 3);
+
+    assert_eq!((7 + 1) * 1024, h.counts.len());
+
+    // 100000 - 2^16 = 34464. In units of 64, this is 538.5. Effective start of 7th bucket is
+    // (6 + 1) * 1024.
+    assert_eq!(538 + (6 + 1) * 1024, h.counts_array_index(100_000));
+    // can record at max.
+    h.record_single_value(100_000).unwrap();
+    assert_eq!(1, h.get_count_at_value(100_000).unwrap());
+    assert_eq!(100000, h.get_max());
+
+    // however, can also record up to 2^17 - 1.
+    let max_expressible_val = (2 << 16) - 1;
+    assert_eq!(0, h.get_count_at_value(max_expressible_val).unwrap());
+    // giant values get clamped to this
+    assert_eq!(0, h.get_count_at_value(100_000_000_000).unwrap());
+
+    h.record_single_value(max_expressible_val).unwrap();
+
+    assert_eq!(1, h.get_count_at_value(max_expressible_val).unwrap());
+    assert_eq!(1, h.get_count_at_value(100_000_000_000).unwrap());
+
+    // and at stated max is still 1
+    assert_eq!(1, h.get_count_at_value(100_000).unwrap());
+
+    assert_eq!(max_expressible_val, h.get_max());
 
 }
 
@@ -78,7 +110,7 @@ fn get_count_empty() {
 
 #[test]
 fn get_min_non_zero_empty() {
-    let mut h = init_histo(1, 100_000, 3);
+    let h = init_histo(1, 100_000, 3);
 
     assert_eq!(u64::max_value(), h.get_min_non_zero());
 }
@@ -152,7 +184,7 @@ fn get_max_record_smaller_value_doesnt_update_max() {
 
 #[test]
 fn get_max_empty() {
-    let mut h = init_histo(1, 100_000, 3);
+    let h = init_histo(1, 100_000, 3);
 
     assert_eq!(0, h.get_max());
 }
@@ -418,9 +450,6 @@ fn counts_array_index_way_past_largest_value_exceeds_length() {
     // Start index is (bucket index + 1) * 1024.
     assert_eq!(1024 * (30 + 1), h.counts_array_index(1 << 40));
 }
-
-// TODO tests on disambiguating values past the stated max value but still capable of being
-// expressed at the top of the top bucket, incl updating the max
 
 #[test]
 fn normalize_index_zero_offset_doesnt_change_index() {

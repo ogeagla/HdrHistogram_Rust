@@ -43,7 +43,6 @@ pub trait HistogramBase<T: HistogramCount> {
 
     fn get_max(&self) -> u64;
     fn get_min_non_zero(&self) -> u64;
-    fn get_mean(&self) -> f64;
 
     fn get_value_at_percentile(&self, percentile: f64) -> u64;
 
@@ -54,14 +53,6 @@ pub trait HistogramBase<T: HistogramCount> {
 }
 
 impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
-
-    fn get_mean(&self) -> f64 {
-
-        if self.get_count() == 0 { 0.0 } else {
-            //TODO stuff
-            0.0
-        }
-    }
 
     fn next_non_equivalent_value(&self, value: u64) -> u64 {
         self.lowest_equivalent_value(value) + self.size_of_equivalent_value_range(value)
@@ -230,6 +221,8 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
             sub_bucket_index -= self.sub_bucket_half_count as u32;
             bucket_index = 0;
         }
+
+        // TODO inline this function? Or at least change types -- we cast to usize then back
         self.value_from_index_sub(bucket_index as usize, sub_bucket_index as usize)
     }
 

@@ -44,6 +44,8 @@ pub trait HistogramBase<T: HistogramCount> {
     fn get_max(&self) -> u64;
     fn get_min_non_zero(&self) -> u64;
 
+    fn get_unit_magnitude(&self) -> u32;
+
     fn get_value_at_percentile(&self, percentile: f64) -> u64;
 
     fn lowest_equivalent_value(&self, value: u64) -> u64;
@@ -121,6 +123,10 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn get_count(&self) -> u64 {
         self.total_count
+    }
+
+    fn get_unit_magnitude(&self) -> u32 {
+        self.unit_magnitude
     }
 
     fn record_single_value(&mut self, value: u64) -> Result<(), String> {

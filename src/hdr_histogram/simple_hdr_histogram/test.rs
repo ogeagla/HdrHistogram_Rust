@@ -190,26 +190,192 @@ fn get_max_empty() {
 }
 
 #[test]
-fn can_record_single_value() {
-    let mut h = histo64(1, 100_000, 3);
-    h.record_single_value(5000).unwrap();
+fn size_of_equivalent_value_range_unit_magnitude_0() {
+    let h = histo64(1, 100_000, 3);
+
+    assert_eq!(1, h.size_of_equivalent_value_range(0));
+    assert_eq!(1, h.size_of_equivalent_value_range(1));
+    assert_eq!(1, h.size_of_equivalent_value_range(1023));
+    // first in top half
+    assert_eq!(1, h.size_of_equivalent_value_range(1024));
+    // last in top half
+    assert_eq!(1, h.size_of_equivalent_value_range(2047));
+    // first in 2nd bucket
+    assert_eq!(2, h.size_of_equivalent_value_range(2048));
+    assert_eq!(2, h.size_of_equivalent_value_range(2049));
+    // end of 2nd bucket
+    assert_eq!(2, h.size_of_equivalent_value_range(4095));
+
+    // in 7th bucket
+    assert_eq!(1 << 6, h.size_of_equivalent_value_range(100_000));
+    // max value in top bucket
+    assert_eq!(1 << 6, h.size_of_equivalent_value_range((1 << 17) - 1));
+    // even bigger
+    assert_eq!(1 << 7, h.size_of_equivalent_value_range((1 << 17)));
 }
 
 #[test]
-fn can_compute_indexes_for_smallest_value() {
+fn size_of_equivalent_value_range_unit_magnitude_2() {
+    let h = histo64(4, 100_000, 3);
+
+    assert_eq!(4, h.size_of_equivalent_value_range(0));
+    assert_eq!(4, h.size_of_equivalent_value_range(1));
+    assert_eq!(4, h.size_of_equivalent_value_range(3));
+    assert_eq!(4, h.size_of_equivalent_value_range(4));
+    assert_eq!(4, h.size_of_equivalent_value_range(4095));
+    // first in top half
+    assert_eq!(4, h.size_of_equivalent_value_range(4096));
+    // last in top half
+    assert_eq!(4, h.size_of_equivalent_value_range(8188));
+    // first in 2nd bucket
+    assert_eq!(8, h.size_of_equivalent_value_range(8192));
+    // end of 2nd bucket
+    assert_eq!(8, h.size_of_equivalent_value_range(16384 - 7));
+}
+
+
+#[test]
+fn highest_equivalent_value_unit_magnitude_0() {
     let h = histo64(1, 100_000, 3);
-    let value = 1;
-    assert_eq!(0, h.get_bucket_index(value));
-    assert_eq!(1, h.get_sub_bucket_index(value, 0));
-    assert_eq!(1, h.counts_array_index(value));
+
+    assert_eq!(0, h.highest_equivalent_value(0));
+    assert_eq!(1, h.highest_equivalent_value(1));
+    assert_eq!(1023, h.highest_equivalent_value(1023));
+    // first in top half
+    assert_eq!(1024, h.highest_equivalent_value(1024));
+    // last in top half
+    assert_eq!(2047, h.highest_equivalent_value(2047));
+    // first in 2nd bucket
+    assert_eq!(2049, h.highest_equivalent_value(2048));
+    assert_eq!(2049, h.highest_equivalent_value(2049));
+    // end of 2nd bucket
+    assert_eq!(4095, h.highest_equivalent_value(4095));
 }
 
 #[test]
-fn can_compute_counts_array_index() {
-    let h = histo64(1, 100_000, 3);
-    let result = h.counts_array_index(5000);
+fn highest_equivalent_value_unit_magnitude_2() {
+    let h = histo64(4, 100_000, 3);
 
-    assert_eq!(3298, result);
+    assert_eq!(3, h.highest_equivalent_value(0));
+    assert_eq!(3, h.highest_equivalent_value(1));
+    assert_eq!(3, h.highest_equivalent_value(3));
+    assert_eq!(7, h.highest_equivalent_value(4));
+    assert_eq!(4095, h.highest_equivalent_value(4095));
+    // first in top half
+    assert_eq!(4099, h.highest_equivalent_value(4096));
+    // last in top half
+    assert_eq!(8191, h.highest_equivalent_value(8188));
+    // first in 2nd bucket
+    assert_eq!(8192 + 7, h.highest_equivalent_value(8192));
+    // 2nd bucket has a scale of 8
+    assert_eq!(8192 + 7, h.highest_equivalent_value(8192 + 7));
+    // end of 2nd bucket
+    assert_eq!(16384 - 1, h.highest_equivalent_value(16384 - 7));
+}
+
+#[test]
+fn next_non_equivalent_value_unit_magnitude_0() {
+    let h = histo64(1, 100_000, 3);
+
+    assert_eq!(1, h.next_non_equivalent_value(0));
+    assert_eq!(2, h.next_non_equivalent_value(1));
+    assert_eq!(1024, h.next_non_equivalent_value(1023));
+    // first in top half
+    assert_eq!(1025, h.next_non_equivalent_value(1024));
+    // last in top half
+    assert_eq!(2048, h.next_non_equivalent_value(2047));
+    // first in 2nd bucket
+    assert_eq!(2050, h.next_non_equivalent_value(2048));
+    // but 2nd bucket has a scale of 2, so next value is same
+    assert_eq!(2050, h.next_non_equivalent_value(2049));
+    // end of 2nd bucket
+    assert_eq!(4096, h.next_non_equivalent_value(4095));
+}
+
+#[test]
+fn next_non_equivalent_value_unit_magnitude_2() {
+    let h = histo64(4, 100_000, 3);
+
+    assert_eq!(4, h.next_non_equivalent_value(0));
+    assert_eq!(4, h.next_non_equivalent_value(1));
+    assert_eq!(4, h.next_non_equivalent_value(3));
+    assert_eq!(8, h.next_non_equivalent_value(4));
+    assert_eq!(4096, h.next_non_equivalent_value(4095));
+    // first in top half
+    assert_eq!(4100, h.next_non_equivalent_value(4096));
+    // last in top half
+    assert_eq!(8192, h.next_non_equivalent_value(8188));
+    // first in 2nd bucket
+    assert_eq!(8192 + 8, h.next_non_equivalent_value(8192));
+    // 2nd bucket has a scale of 8
+    assert_eq!(8192 + 8, h.next_non_equivalent_value(8192 + 7));
+    // end of 2nd bucket
+    assert_eq!(16384, h.next_non_equivalent_value(16384 - 7));
+}
+
+#[test]
+fn lowest_equivalent_value_unit_magnitude_0() {
+    let h = histo64(1, 100_000, 3);
+
+    assert_eq!(0, h.lowest_equivalent_value(0));
+    assert_eq!(1, h.lowest_equivalent_value(1));
+    assert_eq!(1023, h.lowest_equivalent_value(1023));
+    // first in top half
+    assert_eq!(1024, h.lowest_equivalent_value(1024));
+    // last in top half
+    assert_eq!(2047, h.lowest_equivalent_value(2047));
+    // first in 2nd bucket
+    assert_eq!(2048, h.lowest_equivalent_value(2048));
+    // but 2nd bucket has a scale of 2, so next value is same
+    assert_eq!(2048, h.lowest_equivalent_value(2049));
+    // end of 2nd bucket
+    assert_eq!(4094, h.lowest_equivalent_value(4095));
+}
+
+#[test]
+fn lowest_equivalent_value_unit_magnitude_2() {
+    let h = histo64(4, 100_000, 3);
+
+    assert_eq!(0, h.lowest_equivalent_value(0));
+    assert_eq!(0, h.lowest_equivalent_value(1));
+    assert_eq!(0, h.lowest_equivalent_value(3));
+    assert_eq!(4, h.lowest_equivalent_value(4));
+    // last in bottom half
+    assert_eq!(1024 * 4 - 4, h.lowest_equivalent_value(1024 * 4 - 1));
+    // first in top half
+    assert_eq!(1024 * 4, h.lowest_equivalent_value(1024 * 4));
+    // last in top half
+    assert_eq!(2048 * 4 - 4, h.lowest_equivalent_value(2048 * 4 - 1));
+    // first in 2nd bucket
+    assert_eq!(8192, h.lowest_equivalent_value(8192));
+    // 2nd bucket has a scale of 8
+    assert_eq!(8192, h.lowest_equivalent_value(8192 + 7));
+    // end of 2nd bucket
+    assert_eq!(16384 - 8, h.lowest_equivalent_value(16384 - 1));
+}
+
+#[test]
+fn value_from_index_sub_unit_magnitude_0() {
+    let h = histo64(1, 100_000, 3);
+
+    assert_eq!(0, h.value_from_index_sub(0, 0));
+    assert_eq!(2048 - 1, h.value_from_index_sub(0, 2047));
+    assert_eq!(2048, h.value_from_index_sub(1, 1024));
+    // scale is 2
+    assert_eq!(4096 - 2, h.value_from_index_sub(1, 2047));
+    assert_eq!(4096, h.value_from_index_sub(2, 1024));
+}
+
+#[test]
+fn value_from_index_sub_unit_magnitude_2() {
+    let h = histo64(4, 100_000, 3);
+
+    assert_eq!(0, h.value_from_index_sub(0, 0));
+    assert_eq!(2048 * 4 - 4, h.value_from_index_sub(0, 2047));
+    assert_eq!(2048 * 4, h.value_from_index_sub(1, 1024));
+    // scale is 8
+    assert_eq!(4096 * 4 - 8, h.value_from_index_sub(1, 2047));
+    assert_eq!(4096 * 4, h.value_from_index_sub(2, 1024));
 }
 
 #[test]

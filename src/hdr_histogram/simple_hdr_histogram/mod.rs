@@ -43,7 +43,6 @@ pub trait HistogramBase<T: HistogramCount> {
 
     fn get_max(&self) -> u64;
     fn get_min_non_zero(&self) -> u64;
-    fn get_mean(&self) -> f64;
 
     fn get_value_at_percentile(&self, percentile: f64) -> u64;
 
@@ -55,14 +54,6 @@ pub trait HistogramBase<T: HistogramCount> {
 
 impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
-    fn get_mean(&self) -> f64 {
-
-        if self.get_count() == 0 { 0.0 } else {
-            //TODO stuff
-            0.0
-        }
-    }
-
     fn next_non_equivalent_value(&self, value: u64) -> u64 {
         self.lowest_equivalent_value(value) + self.size_of_equivalent_value_range(value)
     }
@@ -70,6 +61,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
     fn size_of_equivalent_value_range(&self, value: u64) -> u64 {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
+        // TODO when is sub_bucket_index >= sub_bucket_count
         let distance_to_next_value =
             1 << (self.unit_magnitude
                     + bucket_index as u32
@@ -84,8 +76,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
     fn lowest_equivalent_value(&self, value: u64) -> u64 {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
-        let this_value_base_level = self.value_from_index_sub(bucket_index, sub_bucket_index);
-        this_value_base_level
+        self.value_from_index_sub(bucket_index, sub_bucket_index)
     }
 
     fn get_value_at_percentile(&self, percentile: f64) -> u64 {
@@ -224,12 +215,14 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
     }
 
     fn value_from_index(&self, index: usize) -> u64 {
+        // TODO make sure these casts are safe
         let mut bucket_index = (index as u32 >> self.sub_bucket_half_count_magnitude) - 1;
         let mut sub_bucket_index = (index as u32 & (self.sub_bucket_half_count as u32 - 1)) + self.sub_bucket_half_count as u32;
         if bucket_index < 0 {
             sub_bucket_index -= self.sub_bucket_half_count as u32;
             bucket_index = 0;
         }
+
         self.value_from_index_sub(bucket_index as usize, sub_bucket_index as usize)
     }
 
@@ -245,6 +238,7 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
     }
 
     fn value_from_index_sub(&self, bucket_index: usize, sub_bucket_index: usize) -> u64 {
+        // these indexes are all small, so safe to cast
         (sub_bucket_index as u64) << (bucket_index as u32 + self.unit_magnitude)
     }
 
@@ -283,8 +277,7 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
                 self.counts[the_index] = self.counts[the_index] + T::one();
                 Ok(())
             }
-            Err(err) =>
-            Err(err)
+            Err(err) => Err(err)
         }
     }
 

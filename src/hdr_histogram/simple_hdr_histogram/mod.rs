@@ -61,6 +61,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
     fn size_of_equivalent_value_range(&self, value: u64) -> u64 {
         let bucket_index = self.get_bucket_index(value);
         let sub_bucket_index = self.get_sub_bucket_index(value, bucket_index);
+        // TODO when is sub_bucket_index >= sub_bucket_count
         let distance_to_next_value =
             1 << (self.unit_magnitude
                     + bucket_index as u32

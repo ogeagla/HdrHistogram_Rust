@@ -359,7 +359,9 @@ fn value_from_index_sub_unit_magnitude_0() {
     let h = histo64(1, 100_000, 3);
 
     assert_eq!(0, h.value_from_index_sub(0, 0));
+    // end of first bucket
     assert_eq!(2048 - 1, h.value_from_index_sub(0, 2047));
+    // start of second bucket
     assert_eq!(2048, h.value_from_index_sub(1, 1024));
     // scale is 2
     assert_eq!(4096 - 2, h.value_from_index_sub(1, 2047));
@@ -371,11 +373,41 @@ fn value_from_index_sub_unit_magnitude_2() {
     let h = histo64(4, 100_000, 3);
 
     assert_eq!(0, h.value_from_index_sub(0, 0));
+    // end of first bucket
     assert_eq!(2048 * 4 - 4, h.value_from_index_sub(0, 2047));
+    // start of second bucket
     assert_eq!(2048 * 4, h.value_from_index_sub(1, 1024));
     // scale is 8
     assert_eq!(4096 * 4 - 8, h.value_from_index_sub(1, 2047));
     assert_eq!(4096 * 4, h.value_from_index_sub(2, 1024));
+}
+
+#[test]
+fn value_from_index_unit_magnitude_0() {
+    let mut h = histo64(1, 100_000, 3);
+
+    // first bucket
+    assert_eq!(0, h.value_from_index(0));
+    assert_eq!(1023, h.value_from_index(1023));
+    assert_eq!(1024, h.value_from_index(1024));
+    assert_eq!(2047, h.value_from_index(2047));
+    // second bucket
+    assert_eq!(2048, h.value_from_index(2048));
+    assert_eq!(4096 - 2, h.value_from_index(3071));
+}
+
+#[test]
+fn value_from_index_unit_magnitude_2() {
+    let mut h = histo64(4, 100_000, 3);
+
+    // first bucket
+    assert_eq!(0, h.value_from_index(0));
+    assert_eq!(4096 - 4, h.value_from_index(1023));
+    assert_eq!(4096, h.value_from_index(1024));
+    assert_eq!(8192 - 4, h.value_from_index(2047));
+    // second bucket
+    assert_eq!(8192, h.value_from_index(2048));
+    assert_eq!(16384 - 8, h.value_from_index(3071));
 }
 
 #[test]
@@ -761,7 +793,8 @@ fn buckets_needed_for_value_med_unit_magnitude_2() {
 fn buckets_needed_for_value_big() {
     // should hit the case where it detects impending overflow
     // 2^53 * 2048 == 2^64, so that's 54 buckets (2^0 to 2^53)
-    assert_eq!(54, SimpleHdrHistogram::<u64>::buckets_needed_for_value((1_u64 << 63), 2048_usize, 0));
+    assert_eq!(54,
+        SimpleHdrHistogram::<u64>::buckets_needed_for_value(u64::max_value(), 2048_usize, 0));
 }
 
 #[test]
@@ -783,6 +816,36 @@ fn init_count_array_len_3_bucket() {
     let h = histo64(1, 5000, 3);
     // 0-2047, 2048-4095 by 2, 4096-8191 by 4
     assert_eq!(4096, h.counts.len())
+}
+
+
+#[test]
+fn init_count_array_len_most_buckets_possible() {
+    let value = u64::max_value();
+    let h = histo64(1, value, 0);
+
+    assert_eq!(2, h.sub_bucket_count);
+    // 2^63 * 2^1 = 2^16, so 64 buckets.
+    // note that this would fit in an i8 even...
+    assert_eq!(64, SimpleHdrHistogram::<u64>::buckets_needed_for_value(
+    value, h.sub_bucket_count, h.unit_magnitude));
+
+    assert_eq!(64 + 1, h.counts.len());
+}
+
+#[test]
+fn init_count_array_len_biggest_array_possible() {
+    let value = u64::max_value();
+    let h = histo64(1, value, 5);
+
+    // 5 sigdigs = 100,000. sub bucket = 200,000. 2^18 = 262,144.
+    assert_eq!(2_usize.pow(18), h.sub_bucket_count);
+    // 2^46 * 2^18 = 2^16, so 47 buckets.
+    assert_eq!(47, SimpleHdrHistogram::<u64>::buckets_needed_for_value(
+    value, h.sub_bucket_count, h.unit_magnitude));
+
+    // still fits in i32
+    assert_eq!((47 + 1) * 2_usize.pow(17), h.counts.len());
 }
 
 #[test]

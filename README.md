@@ -5,6 +5,8 @@ HDR Histogram Rust Port
  - [HDR Histogram](http://hdrhistogram.org/)
  - [Java reference implementation on which this port is based](https://github.com/HdrHistogram/HdrHistogram)
 
+ See the Java implementation (especially `AbstractHistogram` javadocs) for info on how the data structure works.
+
 ## How to build
 ```
 cargo build

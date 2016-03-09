@@ -205,6 +205,13 @@ fn size_of_equivalent_value_range_unit_magnitude_0() {
     assert_eq!(2, h.size_of_equivalent_value_range(2049));
     // end of 2nd bucket
     assert_eq!(2, h.size_of_equivalent_value_range(4095));
+
+    // in 7th bucket
+    assert_eq!(1 << 6, h.size_of_equivalent_value_range(100_000));
+    // max value in top bucket
+    assert_eq!(1 << 6, h.size_of_equivalent_value_range((1 << 17) - 1));
+    // even bigger
+    assert_eq!(1 << 7, h.size_of_equivalent_value_range((1 << 17)));
 }
 
 #[test]

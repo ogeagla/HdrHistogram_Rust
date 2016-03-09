@@ -803,6 +803,6 @@ fn init_leading_zero_count_base_unit_magnitude_2() {
     assert_eq!(51_usize, h.leading_zeros_count_base)
 }
 
-fn histo64(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram<u64> {
+fn histo64<'a>(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> &'a SimpleHdrHistogram<'a, u64> {
     SimpleHdrHistogram::<u64>::new(lowest_discernible_value, highest_trackable_value, num_significant_digits)
 }

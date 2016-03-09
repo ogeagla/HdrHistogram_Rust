@@ -57,8 +57,8 @@ impl HistogramIterationValue {
 }
 
 #[derive(Debug)]
-pub struct BaseHistogramIterator<T: HistogramCount> {
-    histogram: SimpleHdrHistogram<T>,
+pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a> {
+    histogram: &'a SimpleHdrHistogram<'a, T>,
     saved_histogram_total_raw_count: u64,
     current_index: usize,
     current_value_at_index: u64,
@@ -75,8 +75,8 @@ pub struct BaseHistogramIterator<T: HistogramCount> {
     visited_index: i32,
 }
 
-impl<T: HistogramCount> BaseHistogramIterator<T> {
-    fn reset_iterator(mut self, histogram: SimpleHdrHistogram<T>) {
+impl<'a, T: HistogramCount> BaseHistogramIterator<'a, T> {
+    fn reset_iterator(mut self, histogram: &'a SimpleHdrHistogram<'a, T>) {
         self.histogram = histogram;
         self.saved_histogram_total_raw_count = self.histogram.get_count();
         self.array_total_count = self.histogram.get_count();
@@ -124,7 +124,7 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
     }
 }
 
-impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
+impl <'a, T: HistogramCount + 'a> Iterator for BaseHistogramIterator<'a, T> {
 
     type Item = HistogramIterationValue;
     fn next(&mut self) -> Option<Self::Item> {
@@ -185,21 +185,6 @@ impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
                 self.increment_sub_bucket();
             }
         }
-        None
-    }
-}
-
-
-#[derive(Debug)]
-pub struct RecordedValuesIterator {
-    //TODO
-    visited_index: u32,
-}
-
-impl Iterator for RecordedValuesIterator {
-    type Item = HistogramIterationValue;
-    fn next(&mut self) -> Option<Self::Item> {
-        //TODO
         None
     }
 }

@@ -24,6 +24,7 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
     sub_bucket_mask: u64,
     unit_magnitude: u32,
     sub_bucket_count: usize,
+    // always at least 1
     sub_bucket_half_count: usize,
     sub_bucket_half_count_magnitude: u32,
     counts: Vec<T>,
@@ -81,15 +82,16 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn get_value_at_percentile(&self, percentile: f64) -> u64 {
         let requested_percentile = percentile.min(100.0);
-        let mut count_at_percentile = (((requested_percentile / 100.0) * self.get_count() as f64) + 0.5) as u64;
+        let mut count_at_percentile =
+            (((requested_percentile / 100.0) * self.get_count() as f64) + 0.5) as u64;
         count_at_percentile = cmp::max(count_at_percentile, 1);
         let mut total_to_current_index: u64 = 0;
         for i in 0..self.counts.len() {
             let count_at_index = self.get_count_at_index(i as usize);
             match count_at_index {
-                Ok(the_index) => {
+                Ok(count) => {
                     // we only use u8 - u64 types, so this must always work
-                    total_to_current_index += the_index.to_u64().unwrap();
+                    total_to_current_index += count.to_u64().unwrap();
                     if total_to_current_index >= count_at_percentile {
                         let value_at_index = self.value_from_index(i as usize);
                         return if percentile == 0.0 {
@@ -215,15 +217,21 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
     }
 
     fn value_from_index(&self, index: usize) -> u64 {
-        // TODO make sure these casts are safe
-        let mut bucket_index = (index as u32 >> self.sub_bucket_half_count_magnitude) - 1;
-        let mut sub_bucket_index = (index as u32 & (self.sub_bucket_half_count as u32 - 1)) + self.sub_bucket_half_count as u32;
+        // Dividing by sub bucket half count will yield 1 in top half of first bucket, 2 in
+        // 2nd bucket, etc, so subtract 1.
+        // bucket index is 64 max. will go negative for values in lower half
+        let mut bucket_index: i32 = (index as i32 >> self.sub_bucket_half_count_magnitude) - 1;
+        // Msk to lower half, add in half count to always end up in top half.
+        // This will move things in lower half of first bucket into the top half.
+        let mut sub_bucket_index: usize = (index & (self.sub_bucket_half_count - 1))
+            + self.sub_bucket_half_count;
         if bucket_index < 0 {
-            sub_bucket_index -= self.sub_bucket_half_count as u32;
+            // lower half of first bucket case; move sub bucket index back
+            sub_bucket_index -= self.sub_bucket_half_count;
             bucket_index = 0;
         }
 
-        self.value_from_index_sub(bucket_index as usize, sub_bucket_index as usize)
+        self.value_from_index_sub(bucket_index as usize, sub_bucket_index)
     }
 
     fn get_count_at_index(&self, index: usize) -> Result<T, String> {

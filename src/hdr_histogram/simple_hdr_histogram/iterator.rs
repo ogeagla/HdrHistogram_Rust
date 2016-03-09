@@ -122,10 +122,6 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
         self.current_value_at_index = self.histogram.value_from_index(self.current_index);
         self.next_value_at_index = self.histogram.value_from_index(self.current_index + 1);
     }
-
-    pub fn get_percentile_iterated_to(total_count_to_current_index: f64, array_total_count: f64) -> f64 {
-        (100.0 * total_count_to_current_index) / array_total_count
-    }
 }
 
 impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {

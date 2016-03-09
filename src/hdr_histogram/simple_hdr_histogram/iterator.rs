@@ -34,16 +34,25 @@ impl HistogramIterationValue {
     fn reset(mut self) {
         self = HistogramIterationValue { ..Default::default() };
     }
-    fn set(&self, value_iterated_to: u64,
-    value_iterated_from: u64,
-    count_at_value_iterated_to: u64,
-    count_added_in_this_iteration_step: u64,
-    total_count_to_this_value: u64,
-    total_value_to_this_value: u64,
-    percentile: f64,
-    percentile_level_iterated_to: f64,
-    integer_to_double_value_conversion_ratio: f64) {
-
+    fn set(&mut self,
+            value_iterated_to: u64,
+            value_iterated_from: u64,
+            count_at_value_iterated_to: u64,
+            count_added_in_this_iteration_step: u64,
+            total_count_to_this_value: u64,
+            total_value_to_this_value: u64,
+            percentile: f64,
+            percentile_level_iterated_to: f64,
+            integer_to_double_value_conversion_ratio: f64) {
+        self.value_iterated_to = value_iterated_to;
+        self.value_iterated_from = value_iterated_from;
+        self.count_at_value_iterated_to = count_at_value_iterated_to;
+        self.count_added_in_this_iteration_step = count_added_in_this_iteration_step;
+        self.total_count_to_this_value = total_count_to_this_value;
+        self.total_value_to_this_value = total_value_to_this_value;
+        self.percentile = percentile;
+        self.percentile_level_iterated_to = percentile_level_iterated_to;
+        self.integer_to_double_value_conversion_ratio = integer_to_double_value_conversion_ratio;
     }
 }
 
@@ -103,10 +112,6 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
         self.histogram.highest_equivalent_value(self.current_value_at_index)
     }
 
-    pub fn get_percentile_iterated_to(&self) -> f64 {
-        (100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64
-    }
-
     pub fn increment_iteration_level(&mut self) {
         self.visited_index = self.current_index as i32;
     }
@@ -117,9 +122,14 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
         self.current_value_at_index = self.histogram.value_from_index(self.current_index);
         self.next_value_at_index = self.histogram.value_from_index(self.current_index + 1);
     }
+
+    pub fn get_percentile_iterated_to(total_count_to_current_index: f64, array_total_count: f64) -> f64 {
+        (100.0 * total_count_to_current_index) / array_total_count
+    }
 }
 
 impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
+
     type Item = HistogramIterationValue;
     fn next(&mut self) -> Option<Self::Item> {
         //combine Java's hasNext() and next()
@@ -131,6 +141,10 @@ impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
         if self.total_count_to_current_index >= self.array_total_count {
             //this means hasNext() returns false
             return None
+        }
+
+        fn get_percentile_iterated_to(total_count_to_current_index: f64, array_total_count: f64) -> f64 {
+            (100.0 * total_count_to_current_index) / array_total_count
         }
 
         while ! self.exhausted_sub_buckets() {
@@ -160,7 +174,7 @@ impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
                         self.total_count_to_current_index,
                         self.total_value_to_current_index,
                         ((100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64),
-                        self.get_percentile_iterated_to(),
+                        get_percentile_iterated_to(self.total_count_to_current_index as f64, self.array_total_count as f64),
                         self.integer_to_double_value_conversion_ratio);
                     self.prev_value_iterated_to = value_iterated_to;
                     self.total_count_to_prev_index = self.total_count_to_current_index;

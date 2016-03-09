@@ -1,6 +1,7 @@
 use hdr_histogram::simple_hdr_histogram::*;
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct HistogramIterationValue {
     value_iterated_to: u64,
     value_iterated_from: u64,
@@ -33,6 +34,17 @@ impl HistogramIterationValue {
     fn reset(mut self) {
         self = HistogramIterationValue { ..Default::default() };
     }
+    fn set(&self, value_iterated_to: u64,
+    value_iterated_from: u64,
+    count_at_value_iterated_to: u64,
+    count_added_in_this_iteration_step: u64,
+    total_count_to_this_value: u64,
+    total_value_to_this_value: u64,
+    percentile: f64,
+    percentile_level_iterated_to: f64,
+    integer_to_double_value_conversion_ratio: f64) {
+
+    }
 }
 
 #[derive(Debug)]
@@ -50,7 +62,8 @@ pub struct BaseHistogramIterator<T: HistogramCount> {
     count_at_this_value: T,
     fresh_sub_bucket: bool,
     current_iteration_value: HistogramIterationValue,
-    integer_to_double_value_conversion_ratio: u64,
+    integer_to_double_value_conversion_ratio: f64,
+    visited_index: i32,
 }
 
 impl<T: HistogramCount> BaseHistogramIterator<T> {
@@ -58,7 +71,7 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
         self.histogram = histogram;
         self.saved_histogram_total_raw_count = self.histogram.get_count();
         self.array_total_count = self.histogram.get_count();
-        self.integer_to_double_value_conversion_ratio = 0; //TODO should be self.histogram.integer_to_double_value_conversion_ratio
+        self.integer_to_double_value_conversion_ratio = 0.0; //TODO should be self.histogram.integer_to_double_value_conversion_ratio
         self.current_index = 0;
         self.current_value_at_index = 0;
         self.next_value_at_index = 1 << self.histogram.get_unit_magnitude();
@@ -68,10 +81,41 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
         self.total_value_to_current_index = 0;
         self.count_at_this_value = T::zero();
         self.fresh_sub_bucket = true;
+        self.visited_index = -1;
         self.current_iteration_value.reset();
     }
     fn exhausted_sub_buckets(&self) -> bool {
         self.current_index >= 1000 //TODO should be self.histogram.get_counts_array_length()
+    }
+
+    pub fn reached_iter_level(&self) -> bool {
+        let current_count = match self.histogram.get_count_at_index(self.current_index) {
+            Err(err) => 0,
+            Ok(the_count) => match the_count.to_u64() {
+                None => 0,
+                Some(the_val) => the_val
+            }
+        };
+        (current_count != 0) && (self.visited_index != self.current_index as i32)
+    }
+
+    pub fn get_value_iterated_to(&self) -> u64 {
+        self.histogram.highest_equivalent_value(self.current_value_at_index)
+    }
+
+    pub fn get_percentile_iterated_to(&self) -> f64 {
+        (100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64
+    }
+
+    pub fn increment_iteration_level(&mut self) {
+        self.visited_index = self.current_index as i32;
+    }
+
+    pub fn increment_sub_bucket(&mut self) {
+        self.fresh_sub_bucket = true;
+        self.current_index += 1;
+        self.current_value_at_index = self.histogram.value_from_index(self.current_index);
+        self.next_value_at_index = self.histogram.value_from_index(self.current_index + 1);
     }
 }
 
@@ -94,12 +138,47 @@ impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
                 Ok(val) => val,
                 Err(err) => T::zero()
             };
+            if self.fresh_sub_bucket {
+                let count_u64 = match self.count_at_this_value.to_u64() {
+                    None => 0,
+                    Some(the_long) => the_long
+                };
+                self.total_count_to_current_index += count_u64;
+                let highest_eq_val = self.histogram.highest_equivalent_value(self.current_value_at_index);
+                self.total_value_to_current_index += count_u64 * highest_eq_val;
+                self.fresh_sub_bucket = false;
+                if self.reached_iter_level() {
+                    let value_iterated_to = self.get_value_iterated_to();
+                    self.current_iteration_value.set(
+                        value_iterated_to,
+                        self.prev_value_iterated_to,
+                        match self.count_at_this_value.to_u64() {
+                            None => 0,
+                            Some(the_count) => the_count
+                        },
+                        (self.total_count_to_current_index - self.total_count_to_prev_index),
+                        self.total_count_to_current_index,
+                        self.total_value_to_current_index,
+                        ((100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64),
+                        self.get_percentile_iterated_to(),
+                        self.integer_to_double_value_conversion_ratio);
+                    self.prev_value_iterated_to = value_iterated_to;
+                    self.total_count_to_prev_index = self.total_count_to_current_index;
+                    self.increment_iteration_level();
+
+                    if self.histogram.get_count() != self.saved_histogram_total_raw_count {
+                        //TODO this is bad
+                    }
+
+                    return Some(self.current_iteration_value.clone())
+                }
+                self.increment_sub_bucket();
+            }
         }
-
         None
-
     }
 }
+
 
 #[derive(Debug)]
 pub struct RecordedValuesIterator {

@@ -19,7 +19,7 @@ impl HistogramCount for u64 {}
 /// This struct essentially encapsulates the "instance variables" of the histogram
 ///
 #[derive(Debug)]
-pub struct SimpleHdrHistogram<T:HistogramCount> {
+pub struct SimpleHdrHistogram<'a, T:HistogramCount + 'a> {
     leading_zeros_count_base: usize,
     sub_bucket_mask: u64,
     unit_magnitude: u32,
@@ -34,6 +34,7 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
     min_non_zero_value: u64,
     unit_magnitude_mask: u64,
     total_count: u64,
+    recorded_values_iterator: &'a iterator::BaseHistogramIterator<'a, T>,
 }
 
 pub trait HistogramBase<T: HistogramCount> {
@@ -45,6 +46,8 @@ pub trait HistogramBase<T: HistogramCount> {
     fn get_max(&self) -> u64;
     fn get_min_non_zero(&self) -> u64;
 
+    fn get_mean(&self) -> f64;
+
     fn get_unit_magnitude(&self) -> u32;
 
     fn get_value_at_percentile(&self, percentile: f64) -> u64;
@@ -55,7 +58,16 @@ pub trait HistogramBase<T: HistogramCount> {
     fn size_of_equivalent_value_range(&self, value: u64) -> u64;
 }
 
-impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
+impl<'a, T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<'a, T> {
+
+    fn get_mean(&self) -> f64 {
+        if self.get_count() == 0 {
+            return 0.0
+        }
+//        while (*self.recorded_values_iterator).has_next() {}
+//        self.recorded_values_iterator.reset_iterator(self);
+        1.0
+    }
 
     fn next_non_equivalent_value(&self, value: u64) -> u64 {
         self.lowest_equivalent_value(value) + self.size_of_equivalent_value_range(value)
@@ -148,12 +160,12 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
 }
 
-impl<T: HistogramCount> SimpleHdrHistogram<T> {
+impl<'a, T: HistogramCount> SimpleHdrHistogram<'a, T> {
 
     /// lowest_discernible_value: must be >= 1
     /// highest_trackable_value: must be >= 2 * lowest_discernible_value
     /// num_significant_digits: must be <= 5
-    pub fn new(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram<T> {
+    pub fn new(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> &'a SimpleHdrHistogram<'a, T> {
 
         assert!(lowest_discernible_value >= 1);
         assert!(highest_trackable_value >= 2 * lowest_discernible_value);
@@ -181,6 +193,8 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
         // this is a small number (0 - 63) so any usize can hold it
         let leading_zero_count_base: usize = (64_u32 - unit_magnitude - sub_bucket_half_count_magnitude - 1) as usize;
 
+        let the_iterator = iterator::BaseHistogramIterator {};
+
         SimpleHdrHistogram {
             leading_zeros_count_base: leading_zero_count_base,
             unit_magnitude: unit_magnitude,
@@ -193,7 +207,8 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
             min_non_zero_value: u64::max_value(),
             total_count: 0,
             max_value: 0,
-            unit_magnitude_mask: unit_magnitude_mask
+            unit_magnitude_mask: unit_magnitude_mask,
+            recorded_values_iterator: the_iterator,
         }
     }
 

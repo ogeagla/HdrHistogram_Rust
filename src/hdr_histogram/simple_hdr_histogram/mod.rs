@@ -193,7 +193,24 @@ impl<'a, T: HistogramCount> SimpleHdrHistogram<'a, T> {
         // this is a small number (0 - 63) so any usize can hold it
         let leading_zero_count_base: usize = (64_u32 - unit_magnitude - sub_bucket_half_count_magnitude - 1) as usize;
 
-        let the_iterator = iterator::BaseHistogramIterator {};
+        let the_iterator: &'a iterator::BaseHistogramIterator = iterator::BaseHistogramIterator {
+
+            fresh_sub_bucket: true,
+            current_iteration_value: 1,
+            total_count_to_current_index: 0,
+            array_total_count: 0,
+            current_index: 0,
+            next_value_at_index: 0,
+            histogram: 0,
+            integer_to_double_value_conversion_ratio: 0,
+            count_at_this_value: 0,
+            total_count_to_prev_index: 0,
+            total_value_to_current_index: 0,
+            current_value_at_index: 0,
+            prev_value_iterated_to: 0,
+            visited_index: 0,
+            saved_histogram_total_raw_count: 0,
+        };
 
         SimpleHdrHistogram {
             leading_zeros_count_base: leading_zero_count_base,

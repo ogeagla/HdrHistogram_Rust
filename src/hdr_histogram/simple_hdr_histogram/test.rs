@@ -190,6 +190,102 @@ fn get_max_empty() {
 }
 
 #[test]
+fn get_value_at_percentile_empty() {
+    let h = histo64(1, 100_000, 3);
+
+    for x in 0 .. 100 {
+        assert_eq!(0, h.get_value_at_percentile(x as f64));
+    }
+}
+
+#[test]
+fn get_value_at_percentile_populated() {
+    let mut h = histo64(1, 10000, 3);
+
+    // bottom of first bucket
+    h.record_single_value(1000);
+    // top of first bucket
+    h.record_single_value(2000);
+    // second bucket
+    h.record_single_value(3000);
+    h.record_single_value(4000);
+    // third
+    h.record_single_value(5001);
+
+    // always has lowest recorded value
+    assert_eq!(1000, h.get_value_at_percentile(0.0));
+    assert_eq!(1000, h.get_value_at_percentile(10.0));
+    assert_eq!(1000, h.get_value_at_percentile(20.0));
+    // this rounds up to exactly count of 2 when calculating how many values, so we get 2000
+    assert_eq!(2000, h.get_value_at_percentile(30.0));
+    assert_eq!(2000, h.get_value_at_percentile(40.0));
+
+    // in second bucket; highest equiv value
+    assert_eq!(3001, h.get_value_at_percentile(50.0));
+    assert_eq!(3001, h.get_value_at_percentile(60.0));
+
+    assert_eq!(4001, h.get_value_at_percentile(70.0));
+    assert_eq!(4001, h.get_value_at_percentile(80.0));
+
+    // third bucket
+    assert_eq!(5003, h.get_value_at_percentile(90.0));
+    assert_eq!(5003, h.get_value_at_percentile(100.0));
+}
+
+#[test]
+fn get_value_at_percentile_populated_high_scale() {
+    let mut h = histo64(1, 1_000_000, 3);
+
+    // 7th bucket
+    h.record_single_value(100_000);
+    // 8th bucket
+    h.record_single_value(200_000);
+    // 9th
+    h.record_single_value(300_000);
+    h.record_single_value(400_000);
+    h.record_single_value(500_000);
+
+    // always has lowest recorded value
+    // scale of 2^6 = 64 in 7th bucket
+    // lowest equivalent value for 0.0
+    assert_eq!(99_968, h.get_value_at_percentile(0.0));
+    // highest equivalent value
+    assert_eq!(100_031, h.get_value_at_percentile(10.0));
+    assert_eq!(100_031, h.get_value_at_percentile(20.0));
+
+    // next bucket
+    assert_eq!(200_063, h.get_value_at_percentile(30.0));
+    assert_eq!(200_063, h.get_value_at_percentile(40.0));
+
+    // next bucket
+    assert_eq!(300_031, h.get_value_at_percentile(50.0));
+    assert_eq!(300_031, h.get_value_at_percentile(60.0));
+
+    assert_eq!(400_127, h.get_value_at_percentile(70.0));
+    assert_eq!(400_127, h.get_value_at_percentile(80.0));
+
+    assert_eq!(500_223, h.get_value_at_percentile(90.0));
+    assert_eq!(500_223, h.get_value_at_percentile(100.0));
+}
+
+#[test]
+fn get_value_at_percentile_populated_exceed_desired_count_with_one_large_count() {
+    let mut h = histo64(1, 10000, 3);
+
+    // bottom of first bucket
+    h.record_single_value(1000);
+    // top of first bucket
+    h.record_single_value(2000);
+    h.record_single_value(2000);
+    h.record_single_value(2000);
+    // third
+    h.record_single_value(5001);
+
+    // we'll have gotten to 4 values instead of the desired ceil(0.3 * 5) = 2
+    assert_eq!(2000, h.get_value_at_percentile(30.0));
+}
+
+#[test]
 fn size_of_equivalent_value_range_unit_magnitude_0() {
     let h = histo64(1, 100_000, 3);
 
@@ -677,7 +773,7 @@ fn normalize_index_negative_intermediate() {
     assert_eq!(1500, i);
     // equivalent of two right shift. This goes negative and has length added back in.
     assert_eq!(1500 - 2048 + 4096,
-        h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
+    h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
 }
 
 #[test]
@@ -689,7 +785,7 @@ fn normalize_index_oversized_intermediate() {
     assert_eq!(3072, i);
     // equivalent of two left shift. This exceeds array length and has length subtracted.
     assert_eq!(3072 + 2048 - 4096,
-        h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
+    h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
 }
 
 #[test]
@@ -794,7 +890,7 @@ fn buckets_needed_for_value_big() {
     // should hit the case where it detects impending overflow
     // 2^53 * 2048 == 2^64, so that's 54 buckets (2^0 to 2^53)
     assert_eq!(54,
-        SimpleHdrHistogram::<u64>::buckets_needed_for_value(u64::max_value(), 2048_usize, 0));
+    SimpleHdrHistogram::<u64>::buckets_needed_for_value(u64::max_value(), 2048_usize, 0));
 }
 
 #[test]

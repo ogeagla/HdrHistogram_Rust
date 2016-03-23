@@ -47,6 +47,9 @@ pub trait HistogramBase<T: HistogramCount> {
 
     fn get_unit_magnitude(&self) -> u32;
 
+    /// If percentile == 0.0, value is less than or equivalent to all other values. If percentile
+    /// > 0.0, returns the value that the given percentage of the overall recorded value entries
+    /// in the histogram are either smaller than or equivalent to.
     fn get_value_at_percentile(&self, percentile: f64) -> u64;
 
     fn lowest_equivalent_value(&self, value: u64) -> u64;

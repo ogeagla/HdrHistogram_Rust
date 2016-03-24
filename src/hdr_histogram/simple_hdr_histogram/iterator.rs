@@ -30,9 +30,34 @@ impl<T: HistogramCount> Default for HistogramIterationValue<T> {
     }
 }
 
+impl<'a, T: HistogramCount> IntoIterator for RecordedValues<'a, T> {
+    type Item = HistogramIterationValue<T>;
+    type IntoIter = BaseHistogramIterator<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BaseHistogramIterator {
+            histogram: self.histo,
+            saved_histogram_total_raw_count: self.histo.get_count(),
+            array_total_count: self.histo.get_count(),
+            integer_to_double_value_conversion_ratio: 0.0, //TODO should be histogram.integer_to_double_value_conversion_ratio
+            current_index: 0,
+            current_value_at_index: 0,
+            next_value_at_index: 1 << self.histo.get_unit_magnitude(),
+            prev_value_iterated_to: 0,
+            total_count_to_prev_index: 0,
+            total_count_to_current_index: 0,
+            total_value_to_current_index: 0,
+            count_at_this_value: T::zero(),
+            fresh_sub_bucket: true,
+            visited_index: -1,
+            current_iteration_value: HistogramIterationValue::default()
+        }
+    }
+}
+
 impl<T: HistogramCount> HistogramIterationValue<T> {
-    fn reset(mut self) {
-        self = HistogramIterationValue { ..Default::default() };
+    fn reset(&mut self) {
+        *self = HistogramIterationValue { ..HistogramIterationValue::default() };
     }
     fn set(&mut self,
             value_iterated_to: u64,
@@ -56,57 +81,10 @@ impl<T: HistogramCount> HistogramIterationValue<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct BaseHistogramIterator<T: HistogramCount> {
-    histogram: SimpleHdrHistogram<T>,
-    saved_histogram_total_raw_count: u64,
-    current_index: usize,
-    current_value_at_index: u64,
-    next_value_at_index: u64,
-    prev_value_iterated_to: u64,
-    total_count_to_prev_index: u64,
-    total_count_to_current_index: u64,
-    total_value_to_current_index: u64,
-    array_total_count: u64,
-    count_at_this_value: T,
-    fresh_sub_bucket: bool,
-    current_iteration_value: HistogramIterationValue<T>,
-    integer_to_double_value_conversion_ratio: f64,
-    visited_index: i32,
-}
 
-pub struct RecordedValues<'a, T: HistogramCount> {
-    histo: &'a SimpleHdrHistogram<T>
-}
+impl<'a, T: HistogramCount + 'a> BaseHistogramIterator<'a, T> {
 
-impl<'a, T: HistogramCount> IntoIterator for RecordedValues<'a, T> {
-    type Item = HistogramIterationValue<T>;
-    type IntoIter = BaseHistogramIterator<T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        BaseHistogramIterator {
-            histogram: self.histo,
-            saved_histogram_total_raw_count: self.histo.get_count(),
-            array_total_count: self.histo.get_count(),
-            integer_to_double_value_conversion_ratio: 0.0, //TODO should be histogram.integer_to_double_value_conversion_ratio
-            current_index: 0,
-            current_value_at_index: 0,
-            next_value_at_index: 1 << self.histo.get_unit_magnitude(),
-            prev_value_iterated_to: 0,
-            total_count_to_prev_index: 0,
-            total_count_to_current_index: 0,
-            total_value_to_current_index: 0,
-            count_at_this_value: T::zero(),
-            fresh_sub_bucket: true,
-            visited_index: -1,
-            current_iteration_value: HistogramIterationValue::default()
-        }
-    }
-}
-
-impl<T: HistogramCount> BaseHistogramIterator<T> {
-
-    fn reset_iterator(mut self, histogram: SimpleHdrHistogram<T>) {
+    fn reset_iterator(&mut self, histogram: &'a SimpleHdrHistogram<T>) {
         self.histogram = histogram;
         self.saved_histogram_total_raw_count = self.histogram.get_count();
         self.array_total_count = self.histogram.get_count();
@@ -165,7 +143,7 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
     }
 }
 
-impl<T: HistogramCount> Iterator for BaseHistogramIterator<T> {
+impl<'a, T: HistogramCount + 'a> Iterator for BaseHistogramIterator<'a, T> {
     type Item = HistogramIterationValue<T>;
 
     fn next(&mut self) -> Option<Self::Item> {

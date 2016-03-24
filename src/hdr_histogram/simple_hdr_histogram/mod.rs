@@ -412,3 +412,26 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
         (bucket_base_signed + offset_in_bucket) as usize
     }
 }
+
+pub struct RecordedValues<'a, T: HistogramCount + 'a> {
+    histo: &'a SimpleHdrHistogram<T>
+}
+
+#[derive(Debug)]
+pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a> {
+    histogram: &'a SimpleHdrHistogram<T>,
+    saved_histogram_total_raw_count: u64,
+    current_index: usize,
+    current_value_at_index: u64,
+    next_value_at_index: u64,
+    prev_value_iterated_to: u64,
+    total_count_to_prev_index: u64,
+    total_count_to_current_index: u64,
+    total_value_to_current_index: u64,
+    array_total_count: u64,
+    count_at_this_value: T,
+    fresh_sub_bucket: bool,
+    current_iteration_value: HistogramIterationValue<T>,
+    integer_to_double_value_conversion_ratio: f64,
+    visited_index: i32,
+}

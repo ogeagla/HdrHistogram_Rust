@@ -20,7 +20,9 @@ impl HistogramCount for u64 {}
 ///
 #[derive(Debug)]
 pub struct SimpleHdrHistogram<T:HistogramCount> {
+    /// Number of leading zeros in the largest value that can fit in bucket 0.
     leading_zeros_count_base: usize,
+    /// Biggest value that can fit in bucket 0
     sub_bucket_mask: u64,
     unit_magnitude: u32,
     sub_bucket_count: usize,
@@ -29,6 +31,7 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
     sub_bucket_half_count_magnitude: u32,
     counts: Vec<T>,
     // is at most counts.len(), so i32 is plenty since counts scales exponentially
+    /// Index offset (used to express left/right shifts of values)
     normalizing_index_offset: i32,
     max_value: u64,
     min_non_zero_value: u64,
@@ -39,12 +42,18 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
 pub trait HistogramBase<T: HistogramCount> {
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
 
+    /// Returns the number of values stored in this histo
     fn get_count(&self) -> u64;
+    /// Returns the count at the specified value (as well as other equivalent values)
     fn get_count_at_value(&self, value: u64) -> Result<T, String>;
 
+    /// Returns the max value stored. Undefined if no values have been stored.
     fn get_max(&self) -> u64;
+
+    /// Returns the minimum value stored. Undefined if no values have been stored.
     fn get_min_non_zero(&self) -> u64;
 
+    /// Returns the value k such that 2^k <= lowest discernible value
     fn get_unit_magnitude(&self) -> u32;
 
     /// If percentile == 0.0, value is less than or equivalent to all other values. If percentile
@@ -52,9 +61,15 @@ pub trait HistogramBase<T: HistogramCount> {
     /// in the histogram are either smaller than or equivalent to.
     fn get_value_at_percentile(&self, percentile: f64) -> u64;
 
+    /// Returns the lowest value equivalent to the provided value (equivalent meaning will store
+    /// counts in the same memory location)
     fn lowest_equivalent_value(&self, value: u64) -> u64;
+    /// Returns the highest value equivalent to the provided value (equivalent meaning will store
+    /// counts in the same memory location)
     fn highest_equivalent_value(&self, value: u64) -> u64;
+    /// Returns the smallest value that is greater than and not equivalent to the provided value
     fn next_non_equivalent_value(&self, value: u64) -> u64;
+    /// Returns the number of distinct values that will map to the same count as the provided value
     fn size_of_equivalent_value_range(&self, value: u64) -> u64;
 }
 
@@ -287,7 +302,7 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
 
     fn increment_count_at_index(&mut self, index: usize) -> Result<(), String> {
         let normalized_index =
-        self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
+            self.normalize_index(index, self.normalizing_index_offset, self.counts.len());
         match normalized_index {
             Ok(the_index) => {
                 // TODO express exceeding the counts size as an error here?
@@ -298,6 +313,19 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
         }
     }
 
+    /// Calculates the index in the counts array, taking the index offset (representing any
+    /// left/right shifts) into account.
+    ///
+    /// Left shifts have positive offsets. This means to read an existing count, you need to use
+    /// a higher value to reach a higher index that then has the positive offset subtracted off.
+    /// Analogously, right shifts have negative offsets.
+    ///
+    /// When a shift takes place, it is checked for over/underflow, but after a shift has happened,
+    /// the user could still want to record a value that might have over/underflowed if it had been
+    /// there at the time of the shift but is still within the permissible limits of the histogram.
+    /// So, if a left shift has happened and the offset is positive, we wrap underflow from the
+    /// resulting subtraction to the top of the array. If a right shift has happened, the offset is
+    /// negative, so we wrap overflow to the bottom.
     fn normalize_index(&self, index: usize, normalizing_index_offset: i32, array_length: usize) ->
     Result<usize, String> {
         match normalizing_index_offset {
@@ -336,13 +364,18 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
         return self.counts_array_index_sub(bucket_index, sub_bucket_index);
     }
 
+    /// For values in bucket 0, returns an index anywhere in the first bucket. For other buckets,
+    /// the value is always in the top half of the bucket because of how bucket indexes are
+    /// calculated.
     fn get_sub_bucket_index(&self, value: u64, bucket_index: usize) -> usize {
         // safe cast: sub bucket indexes are at most 2 * 10^precision, so can fit in usize.
         // bucket_indexes are even smaller, so can certainly fit in u32.
         (value >> (bucket_index as u32 + self.unit_magnitude)) as usize
     }
 
+    /// Returns the bucket index for the smallest bucket that can hold the value.
     fn get_bucket_index(&self, value: u64) -> usize {
+        // Mask maps small values to bucket 0
         let value_orred = value | self.sub_bucket_mask;
         self.leading_zeros_count_base - (value_orred.leading_zeros() as usize)
     }
@@ -351,9 +384,11 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
         assert!(sub_bucket_index < self.sub_bucket_count);
         assert!(bucket_index == 0 || (sub_bucket_index >= self.sub_bucket_half_count));
 
+        // First entry in bucket that will actually be used (half-way through). For bucket 0 we
+        // can use the whole bucket but we still start indexing at the middle.
         let bucket_base_index = (bucket_index + 1) << self.sub_bucket_half_count_magnitude;
 
-        // offset_in_bucket can be negative for bucket 0.
+        // offset_in_bucket can be negative by up to sub_bucket_half_count for bucket 0.
         // these casts are safe: sub_bucket_index is at most sub_bucket_count, and sub_bucket_count
         // is at most 2 * 10^precision.
         let offset_in_bucket: i32 = sub_bucket_index as i32 - self.sub_bucket_half_count as i32;
@@ -361,7 +396,6 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
         // buckets scale with 2^x * (sub bucket count), so bucket index could be at most the bit
         // length of the value datatype (e.g. 64 bits), and since sub bucket count is > 1 in
         // practice, it's even smaller. Thus, this case to signed is safe.
-
         let bucket_base_signed: i32 = bucket_base_index as i32;
 
         // this always works out to be non-negative: when offset_in_bucket is negative for bucket

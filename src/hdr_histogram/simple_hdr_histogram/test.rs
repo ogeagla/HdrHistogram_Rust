@@ -745,6 +745,15 @@ fn counts_array_index_way_past_largest_value_exceeds_length() {
     assert_eq!(1024 * (30 + 1), h.counts_array_index(1 << 40));
 }
 
+// TODO can't shift right into bottom half
+// TODO can't shift left past end
+// TODO plain shift left
+// TODO plain shift right
+// TODO shift left and right is same
+// TODO shift right and left is same
+// TODO shift left, then write range that underflows
+// TODO shift right, then write range that overflows
+
 #[test]
 fn normalize_index_zero_offset_doesnt_change_index() {
     let h = histo64(1, 100_000, 3);
@@ -754,38 +763,46 @@ fn normalize_index_zero_offset_doesnt_change_index() {
 
 #[test]
 fn normalize_index_simple() {
-    let h = histo64(1, 100_000, 3);
+    let h = histo64(1, 10_000, 3);
     let i = h.counts_array_index(4096);
 
     // end of second bucket
     assert_eq!(3072, i);
-    // equivalent of one right shift. This will not lead to either over or underflow in index
+    // equivalent of one left shift. This will not lead to either over or underflow in index
     // normalization.
-    assert_eq!(2048, h.normalize_index(i, 1024, h.counts.len()).unwrap())
+    assert_eq!(2048, h.normalize_index(i, 1024, h.counts.len()).unwrap());
+    // get original location if you ask for twice the original
+    assert_eq!(i, h.normalize_index(h.counts_array_index(4096 << 1), 1024, h.counts.len()).unwrap())
 }
 
 #[test]
-fn normalize_index_negative_intermediate() {
-    let h = histo64(1, 5000, 3);
-    let i = h.counts_array_index(1500);
+fn normalize_index_left_shift_underflow() {
+    let h = histo64(1, 10_000, 3);
+    let val = 1500;
+    let i = h.counts_array_index(val);
+    let len = 1024 * 5;
+    let offset = 2048;
 
     // upper half of first bucket
     assert_eq!(1500, i);
-    // equivalent of two right shift. This goes negative and has length added back in.
-    assert_eq!(1500 - 2048 + 4096,
-    h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
+    // equivalent of two left shift. This goes negative and has length added back in.
+    assert_eq!(1500 - offset + len, h.normalize_index(i, offset, h.counts.len()).unwrap() as i32);
+    assert_eq!(i, h.normalize_index(h.counts_array_index(val << 2), offset, h.counts.len()).unwrap())
 }
 
 #[test]
-fn normalize_index_oversized_intermediate() {
-    let h = histo64(1, 5000, 3);
-    let i = h.counts_array_index(4096);
+fn normalize_index_right_shift_overflow() {
+    let h = histo64(1, 10_000, 3);
+    let val = 4096;
+    let i = h.counts_array_index(val);
+    let len = 1024 * 5;
+    let offset = -2048;
 
-    // upper half of first bucket
+    // start of third bucket
     assert_eq!(3072, i);
-    // equivalent of two left shift. This exceeds array length and has length subtracted.
-    assert_eq!(3072 + 2048 - 4096,
-    h.normalize_index(i, 2048, h.counts.len()).unwrap() as i64)
+    // equivalent of two right shift. This goes past end and has length subtracted.
+    assert_eq!(3072 - offset - len, h.normalize_index(i, offset, h.counts.len()).unwrap() as i32);
+    assert_eq!(i, h.normalize_index(h.counts_array_index(val >> 2), offset, h.counts.len()).unwrap())
 }
 
 #[test]

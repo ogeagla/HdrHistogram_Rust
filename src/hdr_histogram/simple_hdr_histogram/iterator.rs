@@ -2,24 +2,24 @@ use hdr_histogram::simple_hdr_histogram::*;
 
 #[derive(Debug)]
 #[derive(Clone)]
-pub struct HistogramIterationValue {
+pub struct HistogramIterationValue<T: HistogramCount> {
     value_iterated_to: u64,
     value_iterated_from: u64,
-    count_at_value_iterated_to: u64,
-    count_added_in_this_iteration_step: u64,
-    total_count_to_this_value: u64,
-    total_value_to_this_value: u64,
+    count_at_value_iterated_to: T,
+    count_added_in_this_iteration_step: u64, // TODO can this be T?
+    total_count_to_this_value: u64, // TODO Generify to allow for bigint?
+    total_value_to_this_value: u64, // TODO Generify to allow for bigint?
     percentile: f64,
     percentile_level_iterated_to: f64,
     integer_to_double_value_conversion_ratio: f64,
 }
 
-impl Default for HistogramIterationValue {
-    fn default() -> HistogramIterationValue {
+impl<T: HistogramCount> Default for HistogramIterationValue<T> {
+    fn default() -> HistogramIterationValue<T> {
         HistogramIterationValue {
             value_iterated_to: 0,
             value_iterated_from: 0,
-            count_at_value_iterated_to: 0,
+            count_at_value_iterated_to: T::zero(),
             count_added_in_this_iteration_step: 0,
             total_count_to_this_value: 0,
             total_value_to_this_value: 0,
@@ -30,14 +30,14 @@ impl Default for HistogramIterationValue {
     }
 }
 
-impl HistogramIterationValue {
+impl<T: HistogramCount> HistogramIterationValue<T> {
     fn reset(mut self) {
         self = HistogramIterationValue { ..Default::default() };
     }
     fn set(&mut self,
             value_iterated_to: u64,
             value_iterated_from: u64,
-            count_at_value_iterated_to: u64,
+            count_at_value_iterated_to: T,
             count_added_in_this_iteration_step: u64,
             total_count_to_this_value: u64,
             total_value_to_this_value: u64,
@@ -70,12 +70,42 @@ pub struct BaseHistogramIterator<T: HistogramCount> {
     array_total_count: u64,
     count_at_this_value: T,
     fresh_sub_bucket: bool,
-    current_iteration_value: HistogramIterationValue,
+    current_iteration_value: HistogramIterationValue<T>,
     integer_to_double_value_conversion_ratio: f64,
     visited_index: i32,
 }
 
+pub struct RecordedValues<'a, T: HistogramCount> {
+    histo: &'a SimpleHdrHistogram<T>
+}
+
+impl<'a, T: HistogramCount> IntoIterator for RecordedValues<'a, T> {
+    type Item = HistogramIterationValue<T>;
+    type IntoIter = BaseHistogramIterator<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BaseHistogramIterator {
+            histogram: self.histo,
+            saved_histogram_total_raw_count: self.histo.get_count(),
+            array_total_count: self.histo.get_count(),
+            integer_to_double_value_conversion_ratio: 0.0, //TODO should be histogram.integer_to_double_value_conversion_ratio
+            current_index: 0,
+            current_value_at_index: 0,
+            next_value_at_index: 1 << self.histo.get_unit_magnitude(),
+            prev_value_iterated_to: 0,
+            total_count_to_prev_index: 0,
+            total_count_to_current_index: 0,
+            total_value_to_current_index: 0,
+            count_at_this_value: T::zero(),
+            fresh_sub_bucket: true,
+            visited_index: -1,
+            current_iteration_value: HistogramIterationValue::default()
+        }
+    }
+}
+
 impl<T: HistogramCount> BaseHistogramIterator<T> {
+
     fn reset_iterator(mut self, histogram: SimpleHdrHistogram<T>) {
         self.histogram = histogram;
         self.saved_histogram_total_raw_count = self.histogram.get_count();
@@ -98,14 +128,11 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
     }
 
     pub fn reached_iter_level(&self) -> bool {
-        let current_count = match self.histogram.get_count_at_index(self.current_index) {
-            Err(err) => 0,
-            Ok(the_count) => match the_count.to_u64() {
-                None => 0,
-                Some(the_val) => the_val
-            }
+        let current_count: T = match self.histogram.get_count_at_index(self.current_index) {
+            Err(err) => T::zero(), // TODO
+            Ok(the_count) => the_count
         };
-        (current_count != 0) && (self.visited_index != self.current_index as i32)
+        (current_count != T::zero()) && (self.visited_index != self.current_index as i32)
     }
 
     pub fn get_value_iterated_to(&self) -> u64 {
@@ -122,20 +149,27 @@ impl<T: HistogramCount> BaseHistogramIterator<T> {
         self.current_value_at_index = self.histogram.value_from_index(self.current_index);
         self.next_value_at_index = self.histogram.value_from_index(self.current_index + 1);
     }
-}
 
-impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
-
-    type Item = HistogramIterationValue;
-    fn next(&mut self) -> Option<Self::Item> {
-        //combine Java's hasNext() and next()
-        //first check if has next
+    fn has_next(&self) -> bool {
+        // TODO is this even possible with the borrow checker?
         if self.histogram.get_count() != self.saved_histogram_total_raw_count {
             //in Java, this threw a ConcurrentModificationException
-            return None
+            return false
         }
         if self.total_count_to_current_index >= self.array_total_count {
             //this means hasNext() returns false
+            return false
+        }
+
+        true
+    }
+}
+
+impl<T: HistogramCount> Iterator for BaseHistogramIterator<T> {
+    type Item = HistogramIterationValue<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.has_next() {
             return None
         }
 
@@ -146,7 +180,7 @@ impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
         while ! self.exhausted_sub_buckets() {
             self.count_at_this_value = match self.histogram.get_count_at_index(self.current_index) {
                 Ok(val) => val,
-                Err(err) => T::zero()
+                Err(err) => T::zero() // TODO handle error
             };
             if self.fresh_sub_bucket {
                 let count_u64 = match self.count_at_this_value.to_u64() {
@@ -162,10 +196,7 @@ impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
                     self.current_iteration_value.set(
                         value_iterated_to,
                         self.prev_value_iterated_to,
-                        match self.count_at_this_value.to_u64() {
-                            None => 0,
-                            Some(the_count) => the_count
-                        },
+                        self.count_at_this_value,
                         (self.total_count_to_current_index - self.total_count_to_prev_index),
                         self.total_count_to_current_index,
                         self.total_value_to_current_index,
@@ -185,21 +216,6 @@ impl <T: HistogramCount> Iterator for BaseHistogramIterator<T> {
                 self.increment_sub_bucket();
             }
         }
-        None
-    }
-}
-
-
-#[derive(Debug)]
-pub struct RecordedValuesIterator {
-    //TODO
-    visited_index: u32,
-}
-
-impl Iterator for RecordedValuesIterator {
-    type Item = HistogramIterationValue;
-    fn next(&mut self) -> Option<Self::Item> {
-        //TODO
         None
     }
 }

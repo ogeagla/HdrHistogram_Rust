@@ -4,7 +4,10 @@ use num::traits::Zero;
 use num::traits::One;
 use num::traits::ToPrimitive;
 
+use hdr_histogram::simple_hdr_histogram::iterator::*;
+
 mod iterator;
+mod iterator_test;
 mod test;
 
 /// Marker trait for types we allow (namely, u8-u64)
@@ -71,6 +74,8 @@ pub trait HistogramBase<T: HistogramCount> {
     fn next_non_equivalent_value(&self, value: u64) -> u64;
     /// Returns the number of distinct values that will map to the same count as the provided value
     fn size_of_equivalent_value_range(&self, value: u64) -> u64;
+
+    fn recorded_values(&self) -> RecordedValues<T>;
 }
 
 impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
@@ -163,7 +168,11 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
             }
     }
 
-
+    fn recorded_values(&self) -> RecordedValues<T> {
+        RecordedValues {
+            histo: self
+        }
+    }
 }
 
 impl<T: HistogramCount> SimpleHdrHistogram<T> {

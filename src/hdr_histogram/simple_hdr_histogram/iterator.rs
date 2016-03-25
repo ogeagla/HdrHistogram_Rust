@@ -71,34 +71,18 @@ impl<'a, T: HistogramCount> IntoIterator for RecordedValues<'a, T> {
     type IntoIter = BaseHistogramIterator<'a, T, RecordedValuesStrategy>;
 
     fn into_iter(self) -> Self::IntoIter {
-        BaseHistogramIterator {
-            histogram: self.histo,
-            strategy: RecordedValuesStrategy { visited_index: -1 },
-            saved_histogram_total_raw_count: self.histo.get_count(),
-            array_total_count: self.histo.get_count(),
-            integer_to_double_value_conversion_ratio: 0.0, //TODO should be histogram.integer_to_double_value_conversion_ratio
-            current_index: 0,
-            current_value_at_index: 0,
-            next_value_at_index: 1 << self.histo.get_unit_magnitude(),
-            prev_value_iterated_to: 0,
-            total_count_to_prev_index: 0,
-            total_count_to_current_index: 0,
-            total_value_to_current_index: 0,
-            count_at_this_value: T::zero(),
-            fresh_sub_bucket: true,
-            visited_index: -1,
-            current_iteration_value: HistogramIterationValue::default()
-        }
+        BaseHistogramIterator::new(self.histo, RecordedValuesStrategy { visited_index: -1 })
     }
 }
 
-impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> {
-    /// Default impl
-    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
-        iter.total_count_to_current_index < iter.array_total_count
+impl<'a, T: HistogramCount> IntoIterator for AllValues<'a, T> {
+    type Item = HistogramIterationValue<T>;
+    type IntoIter = BaseHistogramIterator<'a, T, AllValuesStrategy>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BaseHistogramIterator::new(self.histo, AllValuesStrategy { visited_index: -1 })
     }
 }
-
 
 /// Iterates through the values with non-zero counts. When the equivalent value range > 1, the
 /// highest equivalent value is used.
@@ -149,7 +133,7 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for AllValuesStrategy 
 
     fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
         // Unlike other iterators AllValues is only done when we've exhausted the indices:
-        iter.current_index >= (iter.histogram.counts.len() - 1)
+        iter.current_index < (iter.histogram.counts.len() - 1)
     }
 
     fn dummy() -> Self {
@@ -161,6 +145,27 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for AllValuesStrategy 
 
 // this is really a recorded value iterator mashed together with its base class
 impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> BaseHistogramIterator<'a, T, S> {
+
+    fn new(histo: &'a SimpleHdrHistogram<T>, strategy: S) -> BaseHistogramIterator<'a, T, S> {
+        BaseHistogramIterator {
+            histogram: histo,
+            strategy: strategy,
+            saved_histogram_total_raw_count: histo.get_count(),
+            array_total_count: histo.get_count(),
+            integer_to_double_value_conversion_ratio: 0.0, //TODO should be histogram.integer_to_double_value_conversion_ratio
+            current_index: 0,
+            current_value_at_index: 0,
+            next_value_at_index: 1 << histo.get_unit_magnitude(),
+            prev_value_iterated_to: 0,
+            total_count_to_prev_index: 0,
+            total_count_to_current_index: 0,
+            total_value_to_current_index: 0,
+            count_at_this_value: T::zero(),
+            fresh_sub_bucket: true,
+            visited_index: -1,
+            current_iteration_value: HistogramIterationValue::default()
+        }
+    }
 
     fn reset_iterator(&mut self, histogram: &'a SimpleHdrHistogram<T>) {
         self.histogram = histogram;
@@ -180,18 +185,6 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> BaseHistogramItera
 
         self.visited_index = -1;
     }
-
-    fn has_next(&self) -> bool {
-        // java impl checked for count change here, but borrow checker protects us
-
-        if self.total_count_to_current_index >= self.array_total_count {
-            //this means hasNext() returns false
-            return false
-        }
-
-        true
-    }
-
 
     fn get_percentile_iterated_to(&self) -> f64 {
         (100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64
@@ -219,7 +212,7 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
     type Item = HistogramIterationValue<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if ! self.has_next() {
+        if ! self.strategy.allow_further_iteration(self) {
             return None
         }
 

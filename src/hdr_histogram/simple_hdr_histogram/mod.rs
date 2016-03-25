@@ -75,7 +75,11 @@ pub trait HistogramBase<T: HistogramCount> {
     /// Returns the number of distinct values that will map to the same count as the provided value
     fn size_of_equivalent_value_range(&self, value: u64) -> u64;
 
+    /// Iterate across all recorded values
     fn recorded_values(&self) -> RecordedValues<T>;
+    /// Iterate across all expressible values
+    fn all_values(&self) -> AllValues<T>;
+
 }
 
 impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
@@ -170,6 +174,12 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
 
     fn recorded_values(&self) -> RecordedValues<T> {
         RecordedValues {
+            histo: self
+        }
+    }
+
+    fn all_values(&self) -> AllValues<T> {
+        AllValues {
             histo: self
         }
     }
@@ -417,12 +427,19 @@ pub struct RecordedValues<'a, T: HistogramCount + 'a> {
     histo: &'a SimpleHdrHistogram<T>
 }
 
+pub struct AllValues<'a, T: HistogramCount + 'a> {
+    histo: &'a SimpleHdrHistogram<T>
+}
+
 pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
     fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>);
     fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool;
 
     /// return false if iteration is done and we should return None to the consumer of the Iterator
-    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool;
+    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        // default used by several implementations
+        iter.total_count_to_current_index < iter.array_total_count
+    }
 
     /// return a value that is only used as a placeholder in the iterator when mutationg functions
     /// in this struct are called

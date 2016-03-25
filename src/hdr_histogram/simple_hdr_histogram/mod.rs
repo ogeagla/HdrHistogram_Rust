@@ -433,5 +433,6 @@ pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a> {
     fresh_sub_bucket: bool,
     current_iteration_value: HistogramIterationValue<T>,
     integer_to_double_value_conversion_ratio: f64,
+    // needs to hold counts array index but also -1
     visited_index: i32,
 }

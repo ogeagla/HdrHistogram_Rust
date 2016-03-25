@@ -79,9 +79,18 @@ impl<T: HistogramCount> HistogramIterationValue<T> {
         self.percentile_level_iterated_to = percentile_level_iterated_to;
         self.integer_to_double_value_conversion_ratio = integer_to_double_value_conversion_ratio;
     }
+
+    pub fn get_value_iterated_to(&self) -> u64 {
+        self.value_iterated_to
+    }
+
+    pub fn get_count_at_value_iterated_to(&self) -> T {
+        self.count_at_value_iterated_to
+    }
 }
 
 
+// this is really a recorded value iterator mashed together with its base class
 impl<'a, T: HistogramCount + 'a> BaseHistogramIterator<'a, T> {
 
     fn reset_iterator(&mut self, histogram: &'a SimpleHdrHistogram<T>) {
@@ -98,34 +107,24 @@ impl<'a, T: HistogramCount + 'a> BaseHistogramIterator<'a, T> {
         self.total_value_to_current_index = 0;
         self.count_at_this_value = T::zero();
         self.fresh_sub_bucket = true;
-        self.visited_index = -1;
         self.current_iteration_value.reset();
-    }
-    fn exhausted_sub_buckets(&self) -> bool {
-        self.current_index >= 1000 //TODO should be self.histogram.get_counts_array_length()
+
+        self.visited_index = -1;
     }
 
-    pub fn reached_iter_level(&self) -> bool {
-        let current_count: T = match self.histogram.get_count_at_index(self.current_index) {
-            Err(err) => T::zero(), // TODO
-            Ok(the_count) => the_count
-        };
-        (current_count != T::zero()) && (self.visited_index != self.current_index as i32)
-    }
-
-    pub fn get_value_iterated_to(&self) -> u64 {
-        self.histogram.highest_equivalent_value(self.current_value_at_index)
-    }
-
-    pub fn increment_iteration_level(&mut self) {
+    fn increment_iteration_level(&mut self) {
         self.visited_index = self.current_index as i32;
     }
 
-    pub fn increment_sub_bucket(&mut self) {
-        self.fresh_sub_bucket = true;
-        self.current_index += 1;
-        self.current_value_at_index = self.histogram.value_from_index(self.current_index);
-        self.next_value_at_index = self.histogram.value_from_index(self.current_index + 1);
+    fn reached_iter_level(&self) -> bool {
+        let current_count: T = match self.histogram.get_count_at_index(self.current_index) {
+            Err(err) => {
+                println!("error: {}", err);
+                T::zero()}, // TODO
+            Ok(the_count) => the_count
+        };
+        // cast is safe; count indexes << 2^32
+        (current_count != T::zero()) && (self.visited_index != self.current_index as i32)
     }
 
     fn has_next(&self) -> bool {
@@ -141,6 +140,28 @@ impl<'a, T: HistogramCount + 'a> BaseHistogramIterator<'a, T> {
 
         true
     }
+
+
+    fn get_percentile_iterated_to(&self) -> f64 {
+        (100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64
+    }
+
+    fn get_value_iterated_to(&self) -> u64 {
+        self.histogram.highest_equivalent_value(self.current_value_at_index)
+    }
+
+    fn exhausted_sub_buckets(&self) -> bool {
+        self.current_index >= self.histogram.counts.len()
+    }
+
+    fn increment_sub_bucket(&mut self) {
+        self.fresh_sub_bucket = true;
+        self.current_index += 1;
+        self.current_value_at_index = self.histogram.value_from_index(self.current_index);
+        // TODO what if this overflows the index?
+        self.next_value_at_index = self.histogram.value_from_index(self.current_index + 1);
+    }
+
 }
 
 impl<'a, T: HistogramCount + 'a> Iterator for BaseHistogramIterator<'a, T> {
@@ -151,49 +172,47 @@ impl<'a, T: HistogramCount + 'a> Iterator for BaseHistogramIterator<'a, T> {
             return None
         }
 
-        fn get_percentile_iterated_to(total_count_to_current_index: f64, array_total_count: f64) -> f64 {
-            (100.0 * total_count_to_current_index) / array_total_count
-        }
-
         while ! self.exhausted_sub_buckets() {
             self.count_at_this_value = match self.histogram.get_count_at_index(self.current_index) {
                 Ok(val) => val,
                 Err(err) => T::zero() // TODO handle error
             };
             if self.fresh_sub_bucket {
-                let count_u64 = match self.count_at_this_value.to_u64() {
-                    None => 0,
-                    Some(the_long) => the_long
-                };
+                // all count types can become u64
+                let count_u64 = self.count_at_this_value.to_u64().unwrap();
                 self.total_count_to_current_index += count_u64;
                 let highest_eq_val = self.histogram.highest_equivalent_value(self.current_value_at_index);
                 self.total_value_to_current_index += count_u64 * highest_eq_val;
                 self.fresh_sub_bucket = false;
-                if self.reached_iter_level() {
-                    let value_iterated_to = self.get_value_iterated_to();
-                    self.current_iteration_value.set(
-                        value_iterated_to,
-                        self.prev_value_iterated_to,
-                        self.count_at_this_value,
-                        (self.total_count_to_current_index - self.total_count_to_prev_index),
-                        self.total_count_to_current_index,
-                        self.total_value_to_current_index,
-                        ((100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64),
-                        get_percentile_iterated_to(self.total_count_to_current_index as f64, self.array_total_count as f64),
-                        self.integer_to_double_value_conversion_ratio);
-                    self.prev_value_iterated_to = value_iterated_to;
-                    self.total_count_to_prev_index = self.total_count_to_current_index;
-                    self.increment_iteration_level();
-
-                    if self.histogram.get_count() != self.saved_histogram_total_raw_count {
-                        //TODO this is bad
-                    }
-
-                    return Some(self.current_iteration_value.clone())
-                }
-                self.increment_sub_bucket();
             }
+
+            if self.reached_iter_level() {
+                let value_iterated_to = self.get_value_iterated_to();
+                let pctile_iterated_to = self.get_percentile_iterated_to();
+                self.current_iteration_value.set(
+                    value_iterated_to,
+                    self.prev_value_iterated_to,
+                    self.count_at_this_value,
+                    (self.total_count_to_current_index - self.total_count_to_prev_index),
+                    self.total_count_to_current_index,
+                    self.total_value_to_current_index,
+                    ((100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64),
+                    pctile_iterated_to,
+                    self.integer_to_double_value_conversion_ratio);
+                self.prev_value_iterated_to = value_iterated_to;
+                self.total_count_to_prev_index = self.total_count_to_current_index;
+
+                self.increment_iteration_level();
+
+                if self.histogram.get_count() != self.saved_histogram_total_raw_count {
+                    //TODO this is bad. Is this possible w/ borrow checker?
+                }
+
+                return Some(self.current_iteration_value.clone())
+            }
+            self.increment_sub_bucket();
         }
-        None
+        None // TODO what hits here?
     }
+
 }

@@ -92,6 +92,14 @@ impl<'a, T: HistogramCount> IntoIterator for RecordedValues<'a, T> {
     }
 }
 
+impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> {
+    /// Default impl
+    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        iter.total_count_to_current_index < iter.array_total_count
+    }
+}
+
+
 /// Iterates through the values with non-zero counts. When the equivalent value range > 1, the
 /// highest equivalent value is used.
 pub struct RecordedValuesStrategy {
@@ -101,6 +109,7 @@ pub struct RecordedValuesStrategy {
 impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for RecordedValuesStrategy {
 
     fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) {
+        // cast is safe; count indexes << 2^32
         self.visited_index = iter.current_index as i32;
     }
 
@@ -113,12 +122,38 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for RecordedValuesStra
         };
         // detects when we enter the main iteration loop for the first time after having previously
         // returned out of the loop
-        // cast is safe; count indexes << 2^32
         (current_count != T::zero()) && (self.visited_index != iter.current_index as i32)
     }
 
     fn dummy() -> Self {
         RecordedValuesStrategy {
+            visited_index: i32::min_value()
+        }
+    }
+}
+
+pub struct AllValuesStrategy {
+    visited_index: i32
+}
+
+impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for AllValuesStrategy {
+
+    fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) {
+        // cast is safe; count indexes << 2^32
+        self.visited_index = iter.current_index as i32;
+    }
+
+    fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        self.visited_index != iter.current_index as i32
+    }
+
+    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        // Unlike other iterators AllValues is only done when we've exhausted the indices:
+        iter.current_index >= (iter.histogram.counts.len() - 1)
+    }
+
+    fn dummy() -> Self {
+        AllValuesStrategy {
             visited_index: i32::min_value()
         }
     }
@@ -229,6 +264,7 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
 
                 // java impl checked for count change here, but borrow checker protects us
 
+                // TODO could we just expose a ref to the current value here?
                 return Some(self.current_iteration_value.clone())
             }
             self.increment_sub_bucket();

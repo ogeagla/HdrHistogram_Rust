@@ -420,6 +420,10 @@ pub struct RecordedValues<'a, T: HistogramCount + 'a> {
 pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
     fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>);
     fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool;
+
+    /// return false if iteration is done and we should return None to the consumer of the Iterator
+    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool;
+
     /// return a value that is only used as a placeholder in the iterator when mutationg functions
     /// in this struct are called
     fn dummy() -> Self;

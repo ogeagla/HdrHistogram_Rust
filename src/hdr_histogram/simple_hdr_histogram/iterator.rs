@@ -92,6 +92,8 @@ impl<'a, T: HistogramCount> IntoIterator for RecordedValues<'a, T> {
     }
 }
 
+/// Iterates through the values with non-zero counts. When the equivalent value range > 1, the
+/// highest equivalent value is used.
 pub struct RecordedValuesStrategy {
     visited_index: i32
 }
@@ -109,13 +111,15 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for RecordedValuesStra
                 T::zero()}, // TODO
             Ok(the_count) => the_count
         };
+        // detects when we enter the main iteration loop for the first time after having previously
+        // returned out of the loop
         // cast is safe; count indexes << 2^32
         (current_count != T::zero()) && (self.visited_index != iter.current_index as i32)
     }
 
     fn dummy() -> Self {
         RecordedValuesStrategy {
-            visited_index: -1
+            visited_index: i32::min_value()
         }
     }
 }
@@ -143,11 +147,8 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> BaseHistogramItera
     }
 
     fn has_next(&self) -> bool {
-        // TODO is this even possible with the borrow checker?
-        if self.histogram.get_count() != self.saved_histogram_total_raw_count {
-            //in Java, this threw a ConcurrentModificationException
-            return false
-        }
+        // java impl checked for count change here, but borrow checker protects us
+
         if self.total_count_to_current_index >= self.array_total_count {
             //this means hasNext() returns false
             return false
@@ -218,13 +219,15 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
                 self.prev_value_iterated_to = value_iterated_to;
                 self.total_count_to_prev_index = self.total_count_to_current_index;
 
+                // borrow checker won't let us pass an immutable borrow of self to i_i_s when
+                // self.strategy is borrowed as mutable, and we can't pass a mutable borrow of self
+                // because that would be two mutable borrows. Thus, we temporarily drop a dummy
+                // value in.
                 let mut s = mem::replace(&mut self.strategy, S::dummy());
                 s.increment_iteration_level(self);
                 self.strategy = s;
 
-                if self.histogram.get_count() != self.saved_histogram_total_raw_count {
-                    //TODO this is bad. Is this possible w/ borrow checker?
-                }
+                // java impl checked for count change here, but borrow checker protects us
 
                 return Some(self.current_iteration_value.clone())
             }

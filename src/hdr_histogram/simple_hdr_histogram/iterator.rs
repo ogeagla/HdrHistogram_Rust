@@ -1,3 +1,5 @@
+use std::mem;
+
 use hdr_histogram::simple_hdr_histogram::*;
 
 #[derive(Debug)]
@@ -110,6 +112,12 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for RecordedValuesStra
         // cast is safe; count indexes << 2^32
         (current_count != T::zero()) && (self.visited_index != iter.current_index as i32)
     }
+
+    fn dummy() -> Self {
+        RecordedValuesStrategy {
+            visited_index: -1
+        }
+    }
 }
 
 // this is really a recorded value iterator mashed together with its base class
@@ -209,8 +217,10 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
                     self.integer_to_double_value_conversion_ratio);
                 self.prev_value_iterated_to = value_iterated_to;
                 self.total_count_to_prev_index = self.total_count_to_current_index;
-                
-                self.strategy.increment_iteration_level(self);
+
+                let mut s = mem::replace(&mut self.strategy, S::dummy());
+                s.increment_iteration_level(self);
+                self.strategy = s;
 
                 if self.histogram.get_count() != self.saved_histogram_total_raw_count {
                     //TODO this is bad. Is this possible w/ borrow checker?

@@ -420,6 +420,7 @@ pub struct RecordedValues<'a, T: HistogramCount + 'a> {
 pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
     fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>);
     fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool;
+    fn dummy() -> Self;
 }
 
 #[derive(Debug)]

@@ -752,7 +752,10 @@ fn counts_array_index_way_past_largest_value_exceeds_length() {
 // TODO shift left and right is same
 // TODO shift right and left is same
 // TODO shift left, then write range that underflows
+// TODO shift left, then write range that underflows, then try to shift more
 // TODO shift right, then write range that overflows
+// TODO shift right, then write range that overflows, then try to shift more
+
 
 #[test]
 fn normalize_index_zero_offset_doesnt_change_index() {

@@ -417,9 +417,15 @@ pub struct RecordedValues<'a, T: HistogramCount + 'a> {
     histo: &'a SimpleHdrHistogram<T>
 }
 
+pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
+    fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>);
+    fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool;
+}
+
 #[derive(Debug)]
-pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a> {
+pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> {
     histogram: &'a SimpleHdrHistogram<T>,
+    strategy: S,
     saved_histogram_total_raw_count: u64,
     current_index: usize,
     current_value_at_index: u64,

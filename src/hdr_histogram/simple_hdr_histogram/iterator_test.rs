@@ -17,6 +17,7 @@ fn recorded_values_bottom_bucket() {
 
     h.record_single_value(1);
     h.record_single_value(2);
+    h.record_single_value(2);
     h.record_single_value(4);
     h.record_single_value(8);
 
@@ -28,7 +29,7 @@ fn recorded_values_bottom_bucket() {
         values.push(v.get_value_iterated_to());
     }
 
-    assert_eq!(vec!(1, 1, 1, 1), counts);
+    assert_eq!(vec!(1, 2, 1, 1), counts);
     assert_eq!(vec!(1, 2, 4, 8), values);
 }
 

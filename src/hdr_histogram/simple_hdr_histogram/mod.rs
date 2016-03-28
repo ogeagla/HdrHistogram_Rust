@@ -77,8 +77,12 @@ pub trait HistogramBase<T: HistogramCount> {
 
     /// Iterate across all recorded values
     fn recorded_values(&self) -> RecordedValues<T>;
-    /// Iterate across all expressible values
+    /// Iterate across all expressible values, recorded or not
     fn all_values(&self) -> AllValues<T>;
+    /// Iterate across exponentially increasing buckets, starting at value_units_in_first_bucket
+    /// and increasing by log_base each step until recorded values are exhausted.
+    fn logarithmic_bucket_values(&self, value_units_in_first_bucket: u64, log_base: u64)
+        -> LogarithmicValues<T>;
 
 }
 
@@ -181,6 +185,15 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
     fn all_values(&self) -> AllValues<T> {
         AllValues {
             histo: self
+        }
+    }
+
+    fn logarithmic_bucket_values(&self, value_units_in_first_bucket: u64, log_base: u64)
+            -> LogarithmicValues<T> {
+        LogarithmicValues {
+            histo: self,
+            value_units_in_first_bucket: value_units_in_first_bucket,
+            log_base: log_base
         }
     }
 }
@@ -431,18 +444,37 @@ pub struct AllValues<'a, T: HistogramCount + 'a> {
     histo: &'a SimpleHdrHistogram<T>
 }
 
+pub struct LogarithmicValues<'a, T: HistogramCount + 'a> {
+    histo: &'a SimpleHdrHistogram<T>,
+    value_units_in_first_bucket: u64,
+    log_base: u64
+}
+
 pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
     fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>);
+    /// return true if we've reached a position that should be emitted to the consumer of the
+    /// Iterable
     fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool;
 
-    /// return false if iteration is done and we should return None to the consumer of the Iterator
+    /// return false if iteration is done and we should return None to the consumer of the
+    /// Iterator. Analog of Java impl's hasNext().
     fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
-        // default used by several implementations
+        self._default_allow_further_iteration(iter)
+    }
+
+    /// default used by several implementations. Helper to allow overrides to access original logic
+    fn _default_allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
         iter.total_count_to_current_index < iter.array_total_count
     }
 
+    /// the value exposed to the consumer of the iterator at a given iteration point
+    fn value_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> u64 {
+        iter.histogram.highest_equivalent_value(iter.current_value_at_index)
+    }
+
     /// return a value that is only used as a placeholder in the iterator when mutationg functions
-    /// in this struct are called
+    /// in this struct are called. The value returned by dummy is never actually used for anything;
+    /// it is simply the equivalent of a null ptr that temporarily is the value of a field.
     fn dummy() -> Self;
 }
 

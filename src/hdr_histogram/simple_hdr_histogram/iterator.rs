@@ -5,10 +5,12 @@ use hdr_histogram::simple_hdr_histogram::*;
 #[derive(Debug)]
 #[derive(Clone)]
 pub struct HistogramIterationValue<T: HistogramCount> {
-    value_iterated_to: u64,
+    // TODO add tests for other fields we want to expose and mark public
+    pub value_iterated_to: u64,
     value_iterated_from: u64,
-    count_at_value_iterated_to: T,
-    count_added_in_this_iteration_step: u64, // TODO can this be T?
+    pub count_at_value_iterated_to: T,
+    // many counts may be covered in one step, so use largest type
+    pub count_added_in_this_iteration_step: u64,
     total_count_to_this_value: u64, // TODO Generify to allow for bigint?
     total_value_to_this_value: u64, // TODO Generify to allow for bigint?
     percentile: f64,
@@ -56,14 +58,6 @@ impl<T: HistogramCount> HistogramIterationValue<T> {
         self.percentile_level_iterated_to = percentile_level_iterated_to;
         self.integer_to_double_value_conversion_ratio = integer_to_double_value_conversion_ratio;
     }
-
-    pub fn get_value_iterated_to(&self) -> u64 {
-        self.value_iterated_to
-    }
-
-    pub fn get_count_at_value_iterated_to(&self) -> T {
-        self.count_at_value_iterated_to
-    }
 }
 
 impl<'a, T: HistogramCount> IntoIterator for RecordedValues<'a, T> {
@@ -81,6 +75,23 @@ impl<'a, T: HistogramCount> IntoIterator for AllValues<'a, T> {
 
     fn into_iter(self) -> Self::IntoIter {
         BaseHistogramIterator::new(self.histo, AllValuesStrategy { visited_index: -1 })
+    }
+}
+
+impl<'a, T: HistogramCount> IntoIterator for LogarithmicValues<'a, T> {
+    type Item = HistogramIterationValue<T>;
+    type IntoIter = BaseHistogramIterator<'a, T, LogarithmicValuesStrategy>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let first_step_highest_value = self.value_units_in_first_bucket - 1;
+        BaseHistogramIterator::new(self.histo, LogarithmicValuesStrategy {
+            value_units_in_first_bucket: self.value_units_in_first_bucket,
+            log_base: self.log_base,
+            next_value_reporting_level: self.value_units_in_first_bucket,
+            current_step_highest_value_reporting_level: first_step_highest_value,
+            current_step_lowest_value_reporting_level:
+                self.histo.lowest_equivalent_value(first_step_highest_value)
+        })
     }
 }
 
@@ -143,6 +154,60 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for AllValuesStrategy 
     }
 }
 
+pub struct LogarithmicValuesStrategy {
+    value_units_in_first_bucket: u64,
+    // Java impl used double for this; simpler to stick with integer until we know we need double
+    log_base: u64,
+    next_value_reporting_level: u64,
+    current_step_highest_value_reporting_level: u64,
+    current_step_lowest_value_reporting_level: u64
+}
+
+impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LogarithmicValuesStrategy {
+
+    fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) {
+        self.next_value_reporting_level *= self.log_base;
+        self.current_step_highest_value_reporting_level = self.next_value_reporting_level - 1;
+        self.current_step_lowest_value_reporting_level =
+            iter.histogram.lowest_equivalent_value(self.current_step_highest_value_reporting_level);
+    }
+
+    fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        // emit current position if the value fits within the current reporting range or we've
+        // reached the last element while looking for a big enough value. This last would happen
+        // if no values are big enough to reach the next log bucket.
+        (iter.current_value_at_index >= self.current_step_lowest_value_reporting_level)
+            || (iter.current_index >= iter.histogram.counts.len() - 1)
+    }
+
+    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        if self._default_allow_further_iteration(iter) {
+            return true;
+        }
+
+        // failed default check, so count to this point would be equal to total count. Thus,
+        // next sub bucket would be empty, but we're not done iterating if the next reporting level
+        // would fall below the value contained in the next (nonexistent) sub bucket, so we need
+        // to double one more ti
+        return iter.histogram.lowest_equivalent_value(self.next_value_reporting_level)
+            < iter.next_value_at_index
+    }
+
+    fn value_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> u64 {
+        self.current_step_highest_value_reporting_level
+    }
+
+    fn dummy() -> Self {
+        LogarithmicValuesStrategy {
+            value_units_in_first_bucket: 0,
+            log_base: 0,
+            next_value_reporting_level: 0,
+            current_step_highest_value_reporting_level: 0,
+            current_step_lowest_value_reporting_level: 0
+        }
+    }
+}
+
 // this is really a recorded value iterator mashed together with its base class
 impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> BaseHistogramIterator<'a, T, S> {
 
@@ -190,10 +255,6 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> BaseHistogramItera
         (100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64
     }
 
-    fn get_value_iterated_to(&self) -> u64 {
-        self.histogram.highest_equivalent_value(self.current_value_at_index)
-    }
-
     fn exhausted_sub_buckets(&self) -> bool {
         self.current_index >= self.histogram.counts.len()
     }
@@ -202,13 +263,15 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> BaseHistogramItera
         self.fresh_sub_bucket = true;
         self.current_index += 1;
         self.current_value_at_index = self.histogram.value_from_index(self.current_index);
-        // TODO what if this overflows the index?
+        // This only calculates what the value would be, so it doesn't hit the counts array, and
+        // therefore won't overflow when we try the last index
         self.next_value_at_index = self.histogram.value_from_index(self.current_index + 1);
     }
 
 }
 
 impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseHistogramIterator<'a, T, S> {
+    // TODO should this be a ref?
     type Item = HistogramIterationValue<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -219,7 +282,7 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
         while ! self.exhausted_sub_buckets() {
             self.count_at_this_value = match self.histogram.get_count_at_index(self.current_index) {
                 Ok(val) => val,
-                Err(err) => T::zero() // TODO handle error
+                Err(err) => T::one() + T::one() + T::one() // TODO handle error
             };
             if self.fresh_sub_bucket {
                 // all count types can become u64
@@ -231,7 +294,7 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
             }
 
             if self.strategy.reached_iteration_level(self) {
-                let value_iterated_to = self.get_value_iterated_to();
+                let value_iterated_to = self.strategy.value_iterated_to(self);
                 let pctile_iterated_to = self.get_percentile_iterated_to();
 
                 self.current_iteration_value.set(

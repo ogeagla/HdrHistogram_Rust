@@ -203,14 +203,14 @@ fn get_value_at_percentile_populated() {
     let mut h = histo64(1, 10000, 3);
 
     // bottom of first bucket
-    h.record_single_value(1000);
+    h.record_single_value(1000).unwrap();
     // top of first bucket
-    h.record_single_value(2000);
+    h.record_single_value(2000).unwrap();
     // second bucket
-    h.record_single_value(3000);
-    h.record_single_value(4000);
+    h.record_single_value(3000).unwrap();
+    h.record_single_value(4000).unwrap();
     // third
-    h.record_single_value(5001);
+    h.record_single_value(5001).unwrap();
 
     // always has lowest recorded value
     assert_eq!(1000, h.get_value_at_percentile(0.0));
@@ -237,13 +237,13 @@ fn get_value_at_percentile_populated_high_scale() {
     let mut h = histo64(1, 1_000_000, 3);
 
     // 7th bucket
-    h.record_single_value(100_000);
+    h.record_single_value(100_000).unwrap();
     // 8th bucket
-    h.record_single_value(200_000);
+    h.record_single_value(200_000).unwrap();
     // 9th
-    h.record_single_value(300_000);
-    h.record_single_value(400_000);
-    h.record_single_value(500_000);
+    h.record_single_value(300_000).unwrap();
+    h.record_single_value(400_000).unwrap();
+    h.record_single_value(500_000).unwrap();
 
     // always has lowest recorded value
     // scale of 2^6 = 64 in 7th bucket
@@ -273,13 +273,13 @@ fn get_value_at_percentile_populated_exceed_desired_count_with_one_large_count()
     let mut h = histo64(1, 10000, 3);
 
     // bottom of first bucket
-    h.record_single_value(1000);
+    h.record_single_value(1000).unwrap();
     // top of first bucket
-    h.record_single_value(2000);
-    h.record_single_value(2000);
-    h.record_single_value(2000);
+    h.record_single_value(2000).unwrap();
+    h.record_single_value(2000).unwrap();
+    h.record_single_value(2000).unwrap();
     // third
-    h.record_single_value(5001);
+    h.record_single_value(5001).unwrap();
 
     // we'll have gotten to 4 values instead of the desired ceil(0.3 * 5) = 2
     assert_eq!(2000, h.get_value_at_percentile(30.0));
@@ -480,7 +480,7 @@ fn value_from_index_sub_unit_magnitude_2() {
 
 #[test]
 fn value_from_index_unit_magnitude_0() {
-    let mut h = histo64(1, 100_000, 3);
+    let h = histo64(1, 100_000, 3);
 
     // first bucket
     assert_eq!(0, h.value_from_index(0));
@@ -494,7 +494,7 @@ fn value_from_index_unit_magnitude_0() {
 
 #[test]
 fn value_from_index_unit_magnitude_2() {
-    let mut h = histo64(4, 100_000, 3);
+    let h = histo64(4, 100_000, 3);
 
     // first bucket
     assert_eq!(0, h.value_from_index(0));
@@ -982,6 +982,7 @@ fn init_leading_zero_count_base_unit_magnitude_2() {
     assert_eq!(51_usize, h.leading_zeros_count_base)
 }
 
+#[cfg(test)]
 fn histo64(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram<u64> {
     SimpleHdrHistogram::<u64>::new(lowest_discernible_value, highest_trackable_value, num_significant_digits)
 }

@@ -173,7 +173,6 @@ fn logarithmic_bucket_values_min_4_base_2_all_buckets() {
     let mut values = Vec::new();
 
     for v in h.logarithmic_bucket_values(4, 2) {
-        // note not using per-index count
         counts_per_step.push(v.count_added_in_this_iteration_step);
         counts_per_index.push(v.count_at_value_iterated_to);
         values.push(v.value_iterated_to);
@@ -209,7 +208,6 @@ fn logarithmic_bucket_values_min_1_base_2_all_buckets_unit_magnitude_2() {
     let mut values = Vec::new();
 
     for v in h.logarithmic_bucket_values(1, 2) {
-        // note not using per-index count
         counts_per_step.push(v.count_added_in_this_iteration_step);
         counts_per_index.push(v.count_at_value_iterated_to);
         values.push(v.value_iterated_to);
@@ -232,7 +230,6 @@ fn logarithmic_bucket_values_min_1_base_10_all_buckets() {
     let mut values = Vec::new();
 
     for v in h.logarithmic_bucket_values(1, 10) {
-        // note not using per-index count
         counts_per_step.push(v.count_added_in_this_iteration_step);
         counts_per_index.push(v.count_at_value_iterated_to);
         values.push(v.value_iterated_to);
@@ -241,6 +238,43 @@ fn logarithmic_bucket_values_min_1_base_10_all_buckets() {
     assert_eq!(vec!(0, 2, 3,  0,   4), counts_per_step);
     assert_eq!(vec!(0, 0, 0,  0,   1), counts_per_index);
     assert_eq!(vec!(0, 9, 99, 999, 9999), values);
+}
+
+#[test]
+fn linear_bucket_values_size_8_all_buckets() {
+    // two buckets: 32 sub-buckets with scale 1, 16 with scale 2
+    let mut h = histo64(1, 63, 1);
+
+    assert_eq!(48, h.counts.len());
+
+    h.record_single_value(3).unwrap();
+    h.record_single_value(4).unwrap();
+    h.record_single_value(7).unwrap();
+
+    // top half of first bucket
+    h.record_single_value(24).unwrap();
+    h.record_single_value(25).unwrap();
+
+    h.record_single_value(61).unwrap();
+    // stored in same sub bucket as last value
+    h.record_single_value(62).unwrap();
+    // in last sub bucket of 2nd bucket
+    h.record_single_value(63).unwrap();
+
+    let mut counts_per_step = Vec::new();
+    let mut counts_per_index = Vec::new();
+    let mut values = Vec::new();
+
+    for v in h.linear_bucket_values(8) {
+        counts_per_step.push(v.count_added_in_this_iteration_step);
+        counts_per_index.push(v.count_at_value_iterated_to);
+        values.push(v.value_iterated_to);
+    }
+
+    // 4 maps to 7 in magnitude 2
+    assert_eq!(vec!(3, 0,  0,  2,  0,  0,  0,  3), counts_per_step);
+    assert_eq!(vec!(1, 0,  0,  0,  0,  0,  0,  2), counts_per_index);
+    assert_eq!(vec!(7, 15, 23, 31, 39, 47, 55, 63), values);
 }
 
 #[cfg(test)]

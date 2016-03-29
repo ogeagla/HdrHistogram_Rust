@@ -85,12 +85,26 @@ impl<'a, T: HistogramCount> IntoIterator for LogarithmicValues<'a, T> {
     fn into_iter(self) -> Self::IntoIter {
         let first_step_highest_value = self.value_units_in_first_bucket - 1;
         BaseHistogramIterator::new(self.histo, LogarithmicValuesStrategy {
-            value_units_in_first_bucket: self.value_units_in_first_bucket,
             log_base: self.log_base,
             next_value_reporting_level: self.value_units_in_first_bucket,
             current_step_highest_value_reporting_level: first_step_highest_value,
             current_step_lowest_value_reporting_level:
                 self.histo.lowest_equivalent_value(first_step_highest_value)
+        })
+    }
+}
+
+impl<'a, T: HistogramCount> IntoIterator for LinearValues<'a, T> {
+    type Item = HistogramIterationValue<T>;
+    type IntoIter = BaseHistogramIterator<'a, T, LinearValuesStrategy>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let first_step_highest_value = self.value_units_per_bucket - 1;
+        BaseHistogramIterator::new(self.histo, LinearValuesStrategy {
+            value_units_per_bucket: self.value_units_per_bucket,
+            current_step_highest_value_reporting_level: first_step_highest_value,
+            current_step_lowest_value_reporting_level:
+            self.histo.lowest_equivalent_value(first_step_highest_value)
         })
     }
 }
@@ -155,7 +169,6 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for AllValuesStrategy 
 }
 
 pub struct LogarithmicValuesStrategy {
-    value_units_in_first_bucket: u64,
     // Java impl used double for this; simpler to stick with integer until we know we need double
     log_base: u64,
     next_value_reporting_level: u64,
@@ -188,7 +201,7 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LogarithmicValuesS
         // failed default check, so count to this point would be equal to total count. Thus,
         // next sub bucket would be empty, but we're not done iterating if the next reporting level
         // would fall below the value contained in the next (nonexistent) sub bucket, so we need
-        // to double one more ti
+        // to double one more time
         return iter.histogram.lowest_equivalent_value(self.next_value_reporting_level)
             < iter.next_value_at_index
     }
@@ -199,9 +212,55 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LogarithmicValuesS
 
     fn dummy() -> Self {
         LogarithmicValuesStrategy {
-            value_units_in_first_bucket: 0,
             log_base: 0,
             next_value_reporting_level: 0,
+            current_step_highest_value_reporting_level: 0,
+            current_step_lowest_value_reporting_level: 0
+        }
+    }
+}
+
+pub struct LinearValuesStrategy {
+    value_units_per_bucket: u64,
+    current_step_highest_value_reporting_level: u64,
+    current_step_lowest_value_reporting_level: u64
+}
+
+impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LinearValuesStrategy {
+
+    fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) {
+        self.current_step_highest_value_reporting_level += self.value_units_per_bucket;
+        self.current_step_lowest_value_reporting_level =
+            iter.histogram.lowest_equivalent_value(self.current_step_highest_value_reporting_level);
+    }
+
+    fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        // emit current position if the value fits within the current reporting range or we've
+        // reached the last element while looking for a big enough value. This last would happen
+        // if no values are big enough to reach the next log bucket.
+        (iter.current_value_at_index >= self.current_step_lowest_value_reporting_level)
+            || (iter.current_index >= iter.histogram.counts.len() - 1)
+    }
+
+    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        if self._default_allow_further_iteration(iter) {
+            return true;
+        }
+
+        // failed default check, so count to this point would be equal to total count. Thus,
+        // next sub bucket would be empty, but we're not done iterating if the next reporting level
+        // would fall below the value contained in the next (nonexistent) sub bucket, so we need
+        // to expose one more linear bucket.
+        self.current_step_highest_value_reporting_level + 1 < iter.next_value_at_index
+    }
+
+    fn value_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> u64 {
+        self.current_step_highest_value_reporting_level
+    }
+
+    fn dummy() -> Self {
+        LinearValuesStrategy {
+            value_units_per_bucket: 0,
             current_step_highest_value_reporting_level: 0,
             current_step_lowest_value_reporting_level: 0
         }

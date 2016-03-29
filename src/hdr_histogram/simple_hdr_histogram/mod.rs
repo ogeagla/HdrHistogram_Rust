@@ -43,6 +43,7 @@ pub struct SimpleHdrHistogram<T:HistogramCount> {
 }
 
 pub trait HistogramBase<T: HistogramCount> {
+    // TODO error handling improvements
     fn record_single_value(&mut self, value: u64) -> Result<(), String>;
 
     /// Returns the number of values stored in this histo
@@ -83,6 +84,8 @@ pub trait HistogramBase<T: HistogramCount> {
     /// and increasing by log_base each step until recorded values are exhausted.
     fn logarithmic_bucket_values(&self, value_units_in_first_bucket: u64, log_base: u64)
         -> LogarithmicValues<T>;
+    /// Iterate across equal-sized buckets until all recorded values are exhausted.
+    fn linear_bucket_values(&self, value_units_per_bucket: u64) -> LinearValues<T>;
 
 }
 
@@ -196,6 +199,14 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
             log_base: log_base
         }
     }
+
+    fn linear_bucket_values(&self, value_units_per_bucket: u64) -> LinearValues<T> {
+        LinearValues {
+            histo: self,
+            value_units_per_bucket: value_units_per_bucket
+        }
+    }
+
 }
 
 impl<T: HistogramCount> SimpleHdrHistogram<T> {
@@ -448,6 +459,11 @@ pub struct LogarithmicValues<'a, T: HistogramCount + 'a> {
     histo: &'a SimpleHdrHistogram<T>,
     value_units_in_first_bucket: u64,
     log_base: u64
+}
+
+pub struct LinearValues<'a, T: HistogramCount + 'a> {
+    histo: &'a SimpleHdrHistogram<T>,
+    value_units_per_bucket: u64
 }
 
 pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {

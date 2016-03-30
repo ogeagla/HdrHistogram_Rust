@@ -277,6 +277,63 @@ fn linear_bucket_values_size_8_all_buckets() {
     assert_eq!(vec!(7, 15, 23, 31, 39, 47, 55, 63), values);
 }
 
+#[test]
+fn percentiles_smorgasboard() {
+    let mut h = histo64(1, 4095, 3);
+
+    // one of each value up to 2 buckets
+    for i in 0..4096 {
+        h.record_single_value(i).unwrap();
+    }
+
+    let mut counts_per_step = Vec::new();
+    let mut counts_per_index = Vec::new();
+    let mut values = Vec::new();
+    let mut percentiles = Vec::new();
+    let mut percentile_levels = Vec::new();
+
+    for v in h.percentiles(2) {
+        counts_per_step.push(v.count_added_in_this_iteration_step);
+        counts_per_index.push(v.count_at_value_iterated_to);
+        values.push(v.value_iterated_to);
+        percentiles.push(v.percentile);
+        percentile_levels.push(v.percentile_level_iterated_to);
+    }
+
+    // This test is kind of tragic but I'm not sure of a better way to express this
+
+    assert_eq!(vec!(1, 1023, 1024, 512,  512,  256,  256,  128,  128,  64,   64,   32,   32,
+        16,   16,   8,    8,    4,    4,    2,    2,    2,    0,    2,    0), counts_per_step);
+    assert_eq!(vec!(1, 1,    1,    2,    2,    2,    2,    2,    2,    2,    2,    2,    2,
+        2,    2,    2,    2,    2,    2,    2,    2,    2,    2,    2,    2), counts_per_index);
+    assert_eq!(vec!(0, 1023, 2047, 2559, 3071, 3327, 3583, 3711, 3839, 3903, 3967, 3999, 4031,
+        4047, 4063, 4071, 4079, 4083, 4087, 4089, 4091, 4093, 4093, 4095, 4095), values);
+
+    // penultimate percentile is 100.0 because 99.96% of 4095 is 4093.36, so it falls into last
+    // sub bucket, thus gets to 100.0% of count.
+    assert_eq!(vec!(0.0244140625, 25.0, 50.0, 62.5, 75.0, 81.25, 87.5, 90.625, 93.75, 95.3125, 96.875, 97.65625, 98.4375, 98.828125, 99.21875, 99.4140625, 99.609375, 99.70703125, 99.8046875, 99.853515625, 99.90234375, 99.951171875, 99.951171875, 100.0, 100.0), percentiles);
+    // this does look like it takes 2 steps and then decreases the step size
+    assert_eq!(vec!(0.0, 25.0, 50.0, 62.5, 75.0, 81.25, 87.5, 90.625, 93.75, 95.3125, 96.875, 97.65625, 98.4375, 98.828125, 99.21875, 99.4140625, 99.609375, 99.70703125, 99.8046875, 99.853515625, 99.90234375, 99.9267578125, 99.951171875, 99.96337890625, 100.0), percentile_levels);
+
+}
+
+#[test]
+fn percentiles_matches_histo_get_value_at_pctile() {
+    let mut h = histo64(1, 4095, 3);
+
+    // one of each value up to 2 buckets
+    for i in 0..4096 {
+        h.record_single_value(i).unwrap();
+    }
+
+    for p in 1..10 {
+        for v in h.percentiles(p) {
+            assert_eq!(v.value_iterated_to, h.get_value_at_percentile(v.percentile));
+        }
+    }
+}
+
+
 #[cfg(test)]
 fn prepare_histo_for_logarithmic_iterator() -> SimpleHdrHistogram<u64> {
     // two buckets

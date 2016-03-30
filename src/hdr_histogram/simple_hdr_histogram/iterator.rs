@@ -13,8 +13,12 @@ pub struct HistogramIterationValue<T: HistogramCount> {
     pub count_added_in_this_iteration_step: u64,
     total_count_to_this_value: u64, // TODO Generify to allow for bigint?
     total_value_to_this_value: u64, // TODO Generify to allow for bigint?
-    percentile: f64,
-    percentile_level_iterated_to: f64,
+    /// The percentile at the current position
+    pub percentile: f64,
+    /// The percentile intended to iterate to. This can be different from percentile if, for
+    /// instance, we intend to iterate to the 90th %ile but value distribution does not allow us
+    /// to exactly hit 90%.
+    pub percentile_level_iterated_to: f64,
     integer_to_double_value_conversion_ratio: f64,
 }
 
@@ -39,15 +43,15 @@ impl<T: HistogramCount> HistogramIterationValue<T> {
         *self = HistogramIterationValue { ..HistogramIterationValue::default() };
     }
     fn set(&mut self,
-    value_iterated_to: u64,
-    value_iterated_from: u64,
-    count_at_value_iterated_to: T,
-    count_added_in_this_iteration_step: u64,
-    total_count_to_this_value: u64,
-    total_value_to_this_value: u64,
-    percentile: f64,
-    percentile_level_iterated_to: f64,
-    integer_to_double_value_conversion_ratio: f64) {
+            value_iterated_to: u64,
+            value_iterated_from: u64,
+            count_at_value_iterated_to: T,
+            count_added_in_this_iteration_step: u64,
+            total_count_to_this_value: u64,
+            total_value_to_this_value: u64,
+            percentile: f64,
+            percentile_level_iterated_to: f64,
+            integer_to_double_value_conversion_ratio: f64) {
         self.value_iterated_to = value_iterated_to;
         self.value_iterated_from = value_iterated_from;
         self.count_at_value_iterated_to = count_at_value_iterated_to;
@@ -109,6 +113,20 @@ impl<'a, T: HistogramCount> IntoIterator for LinearValues<'a, T> {
     }
 }
 
+impl<'a, T: HistogramCount> IntoIterator for Percentiles<'a, T> {
+    type Item = HistogramIterationValue<T>;
+    type IntoIter = BaseHistogramIterator<'a, T, PercentilesStrategy>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BaseHistogramIterator::new(self.histo, PercentilesStrategy {
+            percentile_ticks_per_half_distance: self.percentile_ticks_per_half_distance,
+            percentile_level_to_iterate_to: 0.0,
+            percentile_level_to_iterate_from: 0.0,
+            reached_last_recorded_value: false
+        })
+    }
+}
+
 /// Iterates through the values with non-zero counts. When the equivalent value range > 1, the
 /// highest equivalent value is used.
 pub struct RecordedValuesStrategy {
@@ -156,7 +174,7 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for AllValuesStrategy 
         self.visited_index != iter.current_index as i32
     }
 
-    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+    fn allow_further_iteration(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
         // Unlike other iterators AllValues is only done when we've exhausted the indices:
         iter.current_index < (iter.histogram.counts.len() - 1)
     }
@@ -193,7 +211,7 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LogarithmicValuesS
             || (iter.current_index >= iter.histogram.counts.len() - 1)
     }
 
-    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+    fn allow_further_iteration(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
         if self._default_allow_further_iteration(iter) {
             return true;
         }
@@ -206,7 +224,7 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LogarithmicValuesS
             < iter.next_value_at_index
     }
 
-    fn value_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> u64 {
+    fn value_iterated_to(&self, _: &BaseHistogramIterator<'a, T, Self>) -> u64 {
         self.current_step_highest_value_reporting_level
     }
 
@@ -242,7 +260,7 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LinearValuesStrate
             || (iter.current_index >= iter.histogram.counts.len() - 1)
     }
 
-    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+    fn allow_further_iteration(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
         if self._default_allow_further_iteration(iter) {
             return true;
         }
@@ -254,7 +272,7 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LinearValuesStrate
         self.current_step_highest_value_reporting_level + 1 < iter.next_value_at_index
     }
 
-    fn value_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> u64 {
+    fn value_iterated_to(&self, _: &BaseHistogramIterator<'a, T, Self>) -> u64 {
         self.current_step_highest_value_reporting_level
     }
 
@@ -263,6 +281,81 @@ impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for LinearValuesStrate
             value_units_per_bucket: 0,
             current_step_highest_value_reporting_level: 0,
             current_step_lowest_value_reporting_level: 0
+        }
+    }
+}
+
+pub struct PercentilesStrategy {
+    percentile_ticks_per_half_distance: u32,
+    percentile_level_to_iterate_to: f64,
+    percentile_level_to_iterate_from: f64,
+    reached_last_recorded_value: bool
+}
+
+impl<'a, T: HistogramCount + 'a> IterationStrategy<'a, T> for PercentilesStrategy {
+
+    fn increment_iteration_level(&mut self, _: &BaseHistogramIterator<'a, T, Self>) {
+        self.percentile_level_to_iterate_from = self.percentile_level_to_iterate_to;
+
+        // To calculate the delta to add on at the current iteration, we want to know how many
+        // iterations at the current scale it would take to go from 0 to 100.
+        // By definition, it should take percentile_ticks_per_half_distance to go half the
+        // remaining distance, so the ticks to go 0-100 is
+        // 2 * pctile_ticks_per_half * (multiples of remaining distance that fit in 0-100).
+        //
+        // However, this will give a "natural" half-distance behavior, where each iteration is
+        // slightly smaller than the one preceding it. To make it easier for users to reason about,
+        // it would be nice if the iteration size would stay the same throughout the entire first
+        // half, then divide in half and stay the same for the next quarter, etc. To do this,
+        // instead of using simply the number of times that the remaining distance will fit, we use
+        // the greatest power of 2 smaller than that. This will exhibit the desired behavior of
+        // "the same every time until it can double".
+
+        // number of times the remaining percentile distance would fit into 100.0
+        let multiples_of_remaining_distance: f64 = 100.0/(100.0 - self.percentile_level_to_iterate_to);
+        // 2x the largest power of 2 that's smaller than the number above (the + 1 power of 2
+        // handles the doubling needed because we have ticks per *half*)
+        let multiples_pwr2: u32 = 2_u32.pow((multiples_of_remaining_distance.ln() / 2_f64.ln()) as u32 + 1);
+        // total number of ticks
+        let pctile_ticks: u32 = self.percentile_ticks_per_half_distance * multiples_pwr2;
+        // add on the per-tick delta
+        self.percentile_level_to_iterate_to += 100.0 / pctile_ticks as f64;
+    }
+
+    fn reached_iteration_level(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        if iter.count_at_this_value == T::zero() {
+            return false;
+        }
+
+        let current_percentile: f64 = (100.0 * iter.total_count_to_current_index as f64) / iter.array_total_count as f64;
+        current_percentile >= self.percentile_level_to_iterate_to
+    }
+
+    fn allow_further_iteration(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+        if self._default_allow_further_iteration(iter) {
+            return true;
+        }
+
+        // want to have one last step to 100%
+        if !self.reached_last_recorded_value && (iter.array_total_count > 0) {
+            self.percentile_level_to_iterate_to = 100.0;
+            self.reached_last_recorded_value = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    fn percentile_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> f64 {
+        self.percentile_level_to_iterate_to
+    }
+
+    fn dummy() -> Self {
+        PercentilesStrategy {
+            percentile_ticks_per_half_distance: 0,
+            percentile_level_to_iterate_to: 0.0,
+            percentile_level_to_iterate_from: 0.0,
+            reached_last_recorded_value: false
         }
     }
 }
@@ -310,10 +403,6 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> BaseHistogramItera
         self.visited_index = -1;
     }
 
-    fn get_percentile_iterated_to(&self) -> f64 {
-        (100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64
-    }
-
     fn exhausted_sub_buckets(&self) -> bool {
         self.current_index >= self.histogram.counts.len()
     }
@@ -334,7 +423,15 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
     type Item = HistogramIterationValue<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if ! self.strategy.allow_further_iteration(self) {
+        // borrow checker won't let us pass an immutable borrow of self to i_i_s when
+        // self.strategy is borrowed as mutable, and we can't pass a mutable borrow of self
+        // because that would be two mutable borrows. Thus, we temporarily drop a dummy
+        // value in so that the strategy isn't owned by self.
+        let mut s = mem::replace(&mut self.strategy, S::dummy());
+        let proceed = s.allow_further_iteration(self);
+        self.strategy = s;
+
+        if ! proceed {
             return None
         }
 
@@ -354,7 +451,7 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
 
             if self.strategy.reached_iteration_level(self) {
                 let value_iterated_to = self.strategy.value_iterated_to(self);
-                let pctile_iterated_to = self.get_percentile_iterated_to();
+                let pctile_iterated_to = self.strategy.percentile_iterated_to(self);
 
                 self.current_iteration_value.set(
                     value_iterated_to,
@@ -363,16 +460,13 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
                     (self.total_count_to_current_index - self.total_count_to_prev_index),
                     self.total_count_to_current_index,
                     self.total_value_to_current_index,
-                    ((100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64),
+                    (100.0 * self.total_count_to_current_index as f64) / self.array_total_count as f64,
                     pctile_iterated_to,
                     self.integer_to_double_value_conversion_ratio);
                 self.prev_value_iterated_to = value_iterated_to;
                 self.total_count_to_prev_index = self.total_count_to_current_index;
 
-                // borrow checker won't let us pass an immutable borrow of self to i_i_s when
-                // self.strategy is borrowed as mutable, and we can't pass a mutable borrow of self
-                // because that would be two mutable borrows. Thus, we temporarily drop a dummy
-                // value in.
+                // more borrow checker shenanigans
                 let mut s = mem::replace(&mut self.strategy, S::dummy());
                 s.increment_iteration_level(self);
                 self.strategy = s;

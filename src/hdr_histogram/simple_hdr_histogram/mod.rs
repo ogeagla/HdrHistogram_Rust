@@ -7,8 +7,8 @@ use num::traits::ToPrimitive;
 use hdr_histogram::simple_hdr_histogram::iterator::*;
 
 mod iterator;
-mod iterator_test;
-mod test;
+#[cfg(test)] mod iterator_test;
+#[cfg(test)] mod test;
 
 /// Marker trait for types we allow (namely, u8-u64)
 pub trait HistogramCount : Ord + Zero + One + ToPrimitive + Copy {}
@@ -86,6 +86,8 @@ pub trait HistogramBase<T: HistogramCount> {
         -> LogarithmicValues<T>;
     /// Iterate across equal-sized buckets until all recorded values are exhausted.
     fn linear_bucket_values(&self, value_units_per_bucket: u64) -> LinearValues<T>;
+    /// Iterate across percentiles until all recorded values are exhausted.
+    fn percentiles(&self, percentile_ticks_per_half_distance: u32) -> Percentiles<T>;
 
 }
 
@@ -204,6 +206,13 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
         LinearValues {
             histo: self,
             value_units_per_bucket: value_units_per_bucket
+        }
+    }
+
+    fn percentiles(&self, percentile_ticks_per_half_distance: u32) -> Percentiles<T> {
+        Percentiles {
+            histo: self,
+            percentile_ticks_per_half_distance: percentile_ticks_per_half_distance
         }
     }
 
@@ -466,6 +475,11 @@ pub struct LinearValues<'a, T: HistogramCount + 'a> {
     value_units_per_bucket: u64
 }
 
+pub struct Percentiles<'a, T: HistogramCount + 'a> {
+    histo: &'a SimpleHdrHistogram<T>,
+    percentile_ticks_per_half_distance: u32
+}
+
 pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
     fn increment_iteration_level(&mut self, iter: &BaseHistogramIterator<'a, T, Self>);
     /// return true if we've reached a position that should be emitted to the consumer of the
@@ -474,7 +488,7 @@ pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
 
     /// return false if iteration is done and we should return None to the consumer of the
     /// Iterator. Analog of Java impl's hasNext().
-    fn allow_further_iteration(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
+    fn allow_further_iteration(&mut self, iter: &BaseHistogramIterator<'a, T, Self>) -> bool {
         self._default_allow_further_iteration(iter)
     }
 
@@ -486,6 +500,11 @@ pub trait IterationStrategy<'a, T: HistogramCount + 'a> : Sized {
     /// the value exposed to the consumer of the iterator at a given iteration point
     fn value_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> u64 {
         iter.histogram.highest_equivalent_value(iter.current_value_at_index)
+    }
+
+    fn percentile_iterated_to(&self, iter: &BaseHistogramIterator<'a, T, Self>) -> f64 {
+        // default to the current percentile
+        (100.0 * iter.total_count_to_current_index as f64) / iter.array_total_count as f64
     }
 
     /// return a value that is only used as a placeholder in the iterator when mutationg functions

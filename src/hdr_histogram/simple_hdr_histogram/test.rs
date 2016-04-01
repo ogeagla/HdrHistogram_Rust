@@ -985,13 +985,63 @@ fn init_leading_zero_count_base_unit_magnitude_2() {
 }
 
 #[test]
-fn zig_zag_encode_0() {
-    assert_eq!(0, zig_zag(0));
+fn varint_write_3_bit_value() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(6, buf);
+
+    let vec = buf.get_ref();
+    assert_eq!(1, vec.len());
+    assert_eq!(0x6, vec[0]);
 }
 
-#[cfg(test)]
-fn zig_zag(num: i64) -> u64 {
-    Encoder::<u64, Cursor<Vec<u8>>>::zig_zag_encode(num);
+
+#[test]
+fn varint_write_7_bit_value() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(127, buf);
+
+    let vec = buf.get_ref();
+    assert_eq!(1, vec.len());
+    assert_eq!(0x7F, vec[0]);
+}
+
+
+#[test]
+fn varint_write_9_bit_value() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(256, buf);
+
+    let vec = buf.get_ref();
+    // marker high bit w/ 0's, then 9th bit (2nd bit of 2nd 7-bit group)
+    assert_eq!(&vec![0x80, 0x02], buf.get_ref());
+}
+
+#[test]
+fn varint_write_u64_max() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(u64::max_value(), buf);
+
+    assert_eq!(&vec![0xFF; 9], buf.get_ref());
+}
+
+#[test]
+fn zig_zag_encode_0() {
+    assert_eq!(0, super::zig_zag_encode(0));
+}
+
+#[test]
+fn zig_zag_encode_neg_1() {
+    assert_eq!(1, super::zig_zag_encode(-1));
+}
+
+#[test]
+fn zig_zag_encode_i64_max() {
+    assert_eq!(u64::max_value() - 1, super::zig_zag_encode(i64::max_value()));
+}
+
+#[test]
+fn zig_zag_encode_i64_min() {
+    assert_eq!(u64::max_value(), super::zig_zag_encode(i64::min_value()));
 }
 
 #[cfg(test)]

@@ -546,84 +546,140 @@ pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a, S: IterationStrateg
     visited_index: i32,
 }
 
-pub trait Encoder<T: HistogramCount, S: Write + Seek> {
+fn encode<T: HistogramCount, S: Write + Seek> (histo: &SimpleHdrHistogram<T>, buf: &mut S) -> Result<u64, String> {
+    // TODO wip
+    // TODO error handling
+    // TODO format? 2s complement?
+    buf.write_i32::<BigEndian>(cookie());
+    // placeholder for length
+    buf.write_u32::<BigEndian>(0);
+    // normalizing offset, always 0 since we don't have shifting implemented yet
+    buf.write_i32::<BigEndian>(0);
+    buf.write_u32::<BigEndian>(histo.num_significant_value_digits as u32);
+    buf.write_u64::<BigEndian>(histo.lowest_discernible_value);
+    buf.write_u64::<BigEndian>(histo.highest_trackable_value);
+    // int to double ratio; always 0 for now
+    buf.write_f64::<BigEndian>(0.0);
 
-    fn encode(&self, histo: &SimpleHdrHistogram<T>, buf: &mut S) -> Result<u64, String> {
-        // TODO error handling
-        // TODO format? 2s complement?
-        buf.write_i32::<BigEndian>(self.cookie());
-        // placeholder for length
-        buf.write_u32::<BigEndian>(0);
-        // normalizing offset, always 0 since we don't have shifting implemented yet
-        buf.write_i32::<BigEndian>(0);
-        buf.write_u32::<BigEndian>(histo.num_significant_value_digits as u32);
-        buf.write_u64::<BigEndian>(histo.lowest_discernible_value);
-        buf.write_u64::<BigEndian>(histo.highest_trackable_value);
-        // int to double ratio; always 0 for now
-        buf.write_f64::<BigEndian>(0.0);
+    write_counts(histo, buf);
 
-        Self::write_counts(histo, buf);
+    Ok(0)
+}
 
-        Ok(0)
-    }
+fn write_counts<T: HistogramCount, S: Write + Seek> (histo: &SimpleHdrHistogram<T>, buf: &mut S) {
+    // TODO wip
+    let counts_limit = histo.counts_array_index(histo.get_max());
+    let mut src_index = 0;
 
-    fn write_counts(histo: &SimpleHdrHistogram<T>, buf: &mut S) {
-        let counts_limit = histo.counts_array_index(histo.get_max());
-        let mut src_index = 0;
+    while src_index < counts_limit {
+        // v2 encoding: positive values are counts, negative values are repeat zero counts.
 
-        while src_index < counts_limit {
-            // v2 encoding: positive values are counts, negative values are repeat zero counts.
+        // TODO handle error
+        let count = histo.get_count_at_index(src_index).unwrap();
+        src_index += 1;
+
+        let mut zeros_count = 0;
+        if count == T::zero() {
+            zeros_count = 1;
 
             // TODO handle error
-            let count = histo.get_count_at_index(src_index).unwrap();
-            src_index += 1;
+            while src_index < counts_limit && (histo.get_count_at_index(src_index).unwrap() == T::zero()) {
+                zeros_count += 1;
+                src_index += 1;
+            }
+        }
 
-            let mut zeros_count = 0;
-            if count == T::zero() {
-                zeros_count = 1;
+        if zeros_count > 1 {
+            varint_write(zig_zag_encode(-zeros_count), buf);
+        } else {
+            // TODO handle error
+            varint_write(zig_zag_encode(count.to_i64().unwrap()), buf);
+        }
+    }
+}
 
-                // TODO handle error
-                while src_index < counts_limit && (histo.get_count_at_index(src_index).unwrap() == T::zero()) {
-                    zeros_count += 1;
-                    src_index += 1;
+/// Write a number as a EB128-64b9B little endian base 128 varint to buf. This is not
+/// quite the same as Protobuf's LEB128 as it encodes 64 bit values in a max of 9 bytes, not 10.
+/// The first 8 7-bit chunks are encoded normally (up through the first 7 bytes of input). The last
+/// byte is added to the buf as-is. This limits the input to 8 bytes, but that's all we need.
+fn varint_write<S: Write + Seek> (input: u64, buf: &mut S) {
+    let mut n = input;
+
+    // The loop is unrolled because the special case is awkward to express in a loop, and it
+    // probably makes the branch predictor happier to do it this way.
+
+    if (input >> 7) == 0 {
+        // fits into one byte, high bit not set. to_u8 must always succeed.
+        buf.write_u8(input.to_u8().unwrap());
+    } else {
+        // set high bit because more bytes are coming, then next 7 bits of value.
+        // mask means to_u8 must always succeed.
+        buf.write_u8(0x80 | (input & 0x7F).to_u8().unwrap());
+        if (input >> 7 * 2) == 0 {
+            // nothing above bottom 2 chunks, this is the last byte, so no high bit
+            buf.write_u8(nth_7b_chunk_as_byte(input, 1));
+        } else {
+            buf.write_u8(truncated_nth_7b_chunk_as_byte(input, 1));
+            if (input >> 7 * 3) == 0 {
+                buf.write_u8(nth_7b_chunk_as_byte(input, 2));
+            } else {
+                buf.write_u8(truncated_nth_7b_chunk_as_byte(input, 2));
+                if (input >> 7 * 4) == 0 {
+                    buf.write_u8(nth_7b_chunk_as_byte(input, 3));
+                } else {
+                    buf.write_u8(truncated_nth_7b_chunk_as_byte(input, 3));
+                    if (input >> 7 * 5) == 0 {
+                        buf.write_u8(nth_7b_chunk_as_byte(input, 4));
+                    } else {
+                        buf.write_u8(truncated_nth_7b_chunk_as_byte(input, 4));
+                        if (input >> 7 * 6) == 0 {
+                            buf.write_u8(nth_7b_chunk_as_byte(input, 5));
+                        } else {
+                            buf.write_u8(truncated_nth_7b_chunk_as_byte(input, 5));
+                            if (input >> 7 * 7) == 0 {
+                                buf.write_u8(nth_7b_chunk_as_byte(input, 6));
+                            } else {
+                                buf.write_u8(truncated_nth_7b_chunk_as_byte(input, 6));
+                                if (input >> 7 * 8) == 0 {
+                                    buf.write_u8(nth_7b_chunk_as_byte(input, 7));
+                                } else {
+                                    buf.write_u8(truncated_nth_7b_chunk_as_byte(input, 7));
+                                    // special case: write last whole byte as is
+                                    buf.write_u8((input >> 56).to_u8().unwrap());
+                                }
+                            }
+                        }
+                    }
                 }
             }
-
-            if zeros_count > 1 {
-                Self::leb128_write(Self::zig_zag_encode(-zeros_count), buf);
-            } else {
-                // TODO handle error
-                Self::leb128_write(Self::zig_zag_encode(count.to_i64().unwrap()), buf);
-            }
         }
     }
+}
 
-    /// Map 0 to 0, -1 to 1, 1 to 2, -2 to 3, etc
-    fn zig_zag_encode(num: i64) -> u64 {
-        // If num < 0, num >> 63 is all 1 and vice versa
-        ((num << 1) ^ (num >> 63)) as u64
-    }
+/// input: a u64 with no bits set above the n*7'th bit
+/// n: >0, how many 7-bit shifts to do
+/// Returns the n'th chunk (starting from least significant) of 7 bits as a byte with the the high
+/// bit unset.
+fn nth_7b_chunk_as_byte(input: u64, n: u8) -> u8 {
+    (input >> 7 * n).to_u8().unwrap()
+}
 
-    /// Write a number as a little endian base 128 varint to buf. This is not quite
-    /// the same as Protobuf's LEB128 as it encodes 64 bit values in a max of 9 bytes, not 10.\
-    fn leb128_write(input: u64, buf: &mut S) {
-        let mut n = input;
-        loop {
-            if (n >> 7) == 0 {
-                // fits into one byte, high bit not set. to_u8 must always succeed.
-                buf.write_u8(n.to_u8().unwrap());
-                break;
-            } else {
-                // set high bit because more bytes are coming, then next 7 bits of value.
-                // mask means to_u8 must always succeed.
-                buf.write_u8(0x80 | (n | 0x7F).to_u8().unwrap());
-                n >>= 7;
-            }
-        }
-    }
+/// input: a u64
+/// n: >0, how many 7-bit shifts to do
+/// Returns the n'th chunk (starting from least significant) of 7 bits as a byte, ignoring all set
+/// bits above that group of 7. The high bit in the byte will be set (not one of the 7 bits that
+/// map to input bits).
+fn truncated_nth_7b_chunk_as_byte(input: u64, n: u8) -> u8 {
+    (((input >> 7 * n) & 0xFF) | 0x80).to_u8().unwrap()
+}
 
-    fn cookie(&self) -> i32 {
-        // TODO v2 cookie
-        0
-    }
+fn cookie() -> i32 {
+    // TODO v2 cookie
+    0
+}
+
+/// Map 0 to 0, -1 to 1, 1 to 2, -2 to 3, etc
+fn zig_zag_encode(num: i64) -> u64 {
+    // If num < 0, num >> 63 is all 1 and vice versa
+    ((num << 1) ^ (num >> 63)) as u64
 }

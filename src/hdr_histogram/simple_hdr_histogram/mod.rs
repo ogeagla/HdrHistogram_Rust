@@ -1,8 +1,9 @@
 use std::cmp;
 use std::cmp::Ord;
-use num::traits::Zero;
-use num::traits::One;
-use num::traits::ToPrimitive;
+use std::io::{Write, Seek};
+
+use num::traits::{Zero, One, ToPrimitive};
+use byteorder::{BigEndian, WriteBytesExt};
 
 use hdr_histogram::simple_hdr_histogram::iterator::*;
 
@@ -11,7 +12,12 @@ mod iterator;
 #[cfg(test)] mod test;
 
 /// Marker trait for types we allow (namely, u8-u64)
-pub trait HistogramCount : Ord + Zero + One + ToPrimitive + Copy {}
+pub trait HistogramCount : Ord + Zero + One + ToPrimitive + Copy {
+    fn as_u64(&self) -> u64 {
+        // always succeeds
+        self.to_u64().unwrap()
+    }
+}
 
 impl HistogramCount for u8 {}
 impl HistogramCount for u16 {}
@@ -22,7 +28,10 @@ impl HistogramCount for u64 {}
 /// This struct essentially encapsulates the "instance variables" of the histogram
 ///
 #[derive(Debug)]
-pub struct SimpleHdrHistogram<T:HistogramCount> {
+pub struct SimpleHdrHistogram<T: HistogramCount> {
+    num_significant_value_digits: u8,
+    lowest_discernible_value: u64,
+    highest_trackable_value: u64,
     /// Number of leading zeros in the largest value that can fit in bucket 0.
     leading_zeros_count_base: usize,
     /// Biggest value that can fit in bucket 0
@@ -129,7 +138,7 @@ impl<T: HistogramCount> HistogramBase<T> for SimpleHdrHistogram<T> {
             match count_at_index {
                 Ok(count) => {
                     // we only use u8 - u64 types, so this must always work
-                    total_to_current_index += count.to_u64().unwrap();
+                    total_to_current_index += count.as_u64();
                     if total_to_current_index >= count_at_percentile {
                         let value_at_index = self.value_from_index(i as usize);
                         return if percentile == 0.0 {
@@ -222,14 +231,14 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
 
     /// lowest_discernible_value: must be >= 1
     /// highest_trackable_value: must be >= 2 * lowest_discernible_value
-    /// num_significant_digits: must be <= 5
-    pub fn new(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram<T> {
+    /// num_significant_value_digits: must be <= 5
+    pub fn new(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_value_digits: u8) -> SimpleHdrHistogram<T> {
 
         assert!(lowest_discernible_value >= 1);
         assert!(highest_trackable_value >= 2 * lowest_discernible_value);
-        assert!(num_significant_digits <= 5);
+        assert!(num_significant_value_digits <= 5);
 
-        let largest_value_with_single_unit_resolution = 2_u64 * 10_u64.pow(num_significant_digits);
+        let largest_value_with_single_unit_resolution = 2_u64 * 10_u64.pow(num_significant_value_digits as u32);
 
         let unit_magnitude = ((lowest_discernible_value as f64).ln() / 2_f64.ln()) as u32;
         let unit_magnitude_mask: u64  = (1_u64 << unit_magnitude) - 1;
@@ -252,6 +261,9 @@ impl<T: HistogramCount> SimpleHdrHistogram<T> {
         let leading_zero_count_base: usize = (64_u32 - unit_magnitude - sub_bucket_half_count_magnitude - 1) as usize;
 
         SimpleHdrHistogram {
+            lowest_discernible_value: lowest_discernible_value,
+            highest_trackable_value: highest_trackable_value,
+            num_significant_value_digits: num_significant_value_digits,
             leading_zeros_count_base: leading_zero_count_base,
             unit_magnitude: unit_magnitude,
             sub_bucket_mask: sub_bucket_mask,
@@ -532,4 +544,86 @@ pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a, S: IterationStrateg
     integer_to_double_value_conversion_ratio: f64,
     // needs to hold counts array index but also -1
     visited_index: i32,
+}
+
+pub trait Encoder<T: HistogramCount, S: Write + Seek> {
+
+    fn encode(&self, histo: &SimpleHdrHistogram<T>, buf: &mut S) -> Result<u64, String> {
+        // TODO error handling
+        // TODO format? 2s complement?
+        buf.write_i32::<BigEndian>(self.cookie());
+        // placeholder for length
+        buf.write_u32::<BigEndian>(0);
+        // normalizing offset, always 0 since we don't have shifting implemented yet
+        buf.write_i32::<BigEndian>(0);
+        buf.write_u32::<BigEndian>(histo.num_significant_value_digits as u32);
+        buf.write_u64::<BigEndian>(histo.lowest_discernible_value);
+        buf.write_u64::<BigEndian>(histo.highest_trackable_value);
+        // int to double ratio; always 0 for now
+        buf.write_f64::<BigEndian>(0.0);
+
+        Self::write_counts(histo, buf);
+
+        Ok(0)
+    }
+
+    fn write_counts(histo: &SimpleHdrHistogram<T>, buf: &mut S) {
+        let counts_limit = histo.counts_array_index(histo.get_max());
+        let mut src_index = 0;
+
+        while src_index < counts_limit {
+            // v2 encoding: positive values are counts, negative values are repeat zero counts.
+
+            // TODO handle error
+            let count = histo.get_count_at_index(src_index).unwrap();
+            src_index += 1;
+
+            let mut zeros_count = 0;
+            if count == T::zero() {
+                zeros_count = 1;
+
+                // TODO handle error
+                while src_index < counts_limit && (histo.get_count_at_index(src_index).unwrap() == T::zero()) {
+                    zeros_count += 1;
+                    src_index += 1;
+                }
+            }
+
+            if zeros_count > 1 {
+                Self::leb128_write(Self::zig_zag_encode(-zeros_count), buf);
+            } else {
+                // TODO handle error
+                Self::leb128_write(Self::zig_zag_encode(count.to_i64().unwrap()), buf);
+            }
+        }
+    }
+
+    /// Map 0 to 0, -1 to 1, 1 to 2, -2 to 3, etc
+    fn zig_zag_encode(num: i64) -> u64 {
+        // If num < 0, num >> 63 is all 1 and vice versa
+        ((num << 1) ^ (num >> 63)) as u64
+    }
+
+    /// Write a number as a little endian base 128 varint to buf. This is not quite
+    /// the same as Protobuf's LEB128 as it encodes 64 bit values in a max of 9 bytes, not 10.\
+    fn leb128_write(input: u64, buf: &mut S) {
+        let mut n = input;
+        loop {
+            if (n >> 7) == 0 {
+                // fits into one byte, high bit not set. to_u8 must always succeed.
+                buf.write_u8(n.to_u8().unwrap());
+                break;
+            } else {
+                // set high bit because more bytes are coming, then next 7 bits of value.
+                // mask means to_u8 must always succeed.
+                buf.write_u8(0x80 | (n | 0x7F).to_u8().unwrap());
+                n >>= 7;
+            }
+        }
+    }
+
+    fn cookie(&self) -> i32 {
+        // TODO v2 cookie
+        0
+    }
 }

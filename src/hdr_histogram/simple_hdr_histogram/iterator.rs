@@ -442,7 +442,7 @@ impl<'a, T: HistogramCount + 'a, S: IterationStrategy<'a, T>> Iterator for BaseH
             };
             if self.fresh_sub_bucket {
                 // all count types can become u64
-                let count_u64 = self.count_at_this_value.to_u64().unwrap();
+                let count_u64 = self.count_at_this_value.as_u64();
                 self.total_count_to_current_index += count_u64;
                 let highest_eq_val = self.histogram.highest_equivalent_value(self.current_value_at_index);
                 self.total_value_to_current_index += count_u64 * highest_eq_val;

@@ -359,6 +359,6 @@ fn prepare_histo_for_logarithmic_iterator() -> SimpleHdrHistogram<u64> {
 }
 
 #[cfg(test)]
-fn histo64(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u32) -> SimpleHdrHistogram<u64> {
+fn histo64(lowest_discernible_value: u64, highest_trackable_value: u64, num_significant_digits: u8) -> SimpleHdrHistogram<u64> {
     SimpleHdrHistogram::<u64>::new(lowest_discernible_value, highest_trackable_value, num_significant_digits)
 }

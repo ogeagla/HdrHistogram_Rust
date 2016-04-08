@@ -1,9 +1,9 @@
 use std::cmp;
 use std::cmp::Ord;
-use std::io::{Write, Seek};
+use std::io::{Read, Write, Seek};
 
 use num::traits::{Zero, One, ToPrimitive};
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
 use hdr_histogram::simple_hdr_histogram::iterator::*;
 
@@ -546,7 +546,7 @@ pub struct BaseHistogramIterator<'a, T: HistogramCount + 'a, S: IterationStrateg
     visited_index: i32,
 }
 
-fn encode<T: HistogramCount, S: Write + Seek> (histo: &SimpleHdrHistogram<T>, buf: &mut S) -> Result<u64, String> {
+fn encode<T: HistogramCount, B: Write + Seek> (histo: &SimpleHdrHistogram<T>, buf: &mut B) -> Result<u64, String> {
     // TODO wip
     // TODO error handling
     // TODO format? 2s complement?
@@ -566,7 +566,7 @@ fn encode<T: HistogramCount, S: Write + Seek> (histo: &SimpleHdrHistogram<T>, bu
     Ok(0)
 }
 
-fn write_counts<T: HistogramCount, S: Write + Seek> (histo: &SimpleHdrHistogram<T>, buf: &mut S) {
+fn write_counts<T: HistogramCount, B: Write> (histo: &SimpleHdrHistogram<T>, buf: &mut B) {
     // TODO wip
     let counts_limit = histo.counts_array_index(histo.get_max());
     let mut src_index = 0;
@@ -598,11 +598,11 @@ fn write_counts<T: HistogramCount, S: Write + Seek> (histo: &SimpleHdrHistogram<
     }
 }
 
-/// Write a number as a EB128-64b9B little endian base 128 varint to buf. This is not
+/// Write a number as a LEB128-64b9B little endian base 128 varint to buf. This is not
 /// quite the same as Protobuf's LEB128 as it encodes 64 bit values in a max of 9 bytes, not 10.
 /// The first 8 7-bit chunks are encoded normally (up through the first 7 bytes of input). The last
 /// byte is added to the buf as-is. This limits the input to 8 bytes, but that's all we need.
-fn varint_write<S: Write + Seek> (input: u64, buf: &mut S) {
+fn varint_write<B: Write> (input: u64, buf: &mut B) {
     let mut n = input;
 
     // The loop is unrolled because the special case is awkward to express in a loop, and it
@@ -656,6 +656,52 @@ fn varint_write<S: Write + Seek> (input: u64, buf: &mut S) {
     }
 }
 
+/// Read a LEB128-64b9B from the buffer
+fn varint_read<B: Read>(buf: &mut B) -> Result<u64,()> {
+    // TODO handle error
+    let mut b = buf.read_u8().unwrap();
+
+    // take low 7 bits
+    let mut value: u64 = low_7_bits(b);
+
+    if is_high_bit_set(b) {
+        // high bit set, keep reading
+        b = buf.read_u8().unwrap();
+        value |= low_7_bits(b) << 7;
+        if is_high_bit_set(b) {
+            b = buf.read_u8().unwrap();
+            value |= low_7_bits(b) << 7 * 2;
+            if is_high_bit_set(b) {
+                b = buf.read_u8().unwrap();
+                value |= low_7_bits(b) << 7 * 3;
+                if is_high_bit_set(b) {
+                    b = buf.read_u8().unwrap();
+                    value |= low_7_bits(b) << 7 * 4;
+                    if is_high_bit_set(b) {
+                        b = buf.read_u8().unwrap();
+                        value |= low_7_bits(b) << 7 * 5;
+                        if is_high_bit_set(b) {
+                            b = buf.read_u8().unwrap();
+                            value |= low_7_bits(b) << 7 * 6;
+                            if is_high_bit_set(b) {
+                                b = buf.read_u8().unwrap();
+                                value |= low_7_bits(b) << 7 * 7;
+                                if is_high_bit_set(b) {
+                                    b = buf.read_u8().unwrap();
+                                    // special case: use last byte as is
+                                    value |= b.to_u64().unwrap() << 7 * 8;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(value)
+}
+
 /// input: a u64 with no bits set above the n*7'th bit
 /// n: >0, how many 7-bit shifts to do
 /// Returns the n'th chunk (starting from least significant) of 7 bits as a byte with the the high
@@ -671,6 +717,15 @@ fn nth_7b_chunk_as_byte(input: u64, n: u8) -> u8 {
 /// map to input bits).
 fn truncated_nth_7b_chunk_as_byte(input: u64, n: u8) -> u8 {
     (((input >> 7 * n) & 0xFF) | 0x80).to_u8().unwrap()
+}
+
+/// truncate byte to low 7 bits, cast to u64
+fn low_7_bits(b: u8) -> u64 {
+    (b & 0x7F) as u64
+}
+
+fn is_high_bit_set(b: u8) -> bool {
+    (b & 0x80) != 0
 }
 
 fn cookie() -> i32 {

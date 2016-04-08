@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use rand::{Rng, SeedableRng, XorShiftRng, thread_rng};
 
 use hdr_histogram::simple_hdr_histogram::*;
 
@@ -1022,6 +1023,34 @@ fn varint_write_u64_max() {
     super::varint_write(u64::max_value(), buf);
 
     assert_eq!(&vec![0xFF; 9], buf.get_ref());
+}
+
+#[test]
+fn varint_read_u64_max() {
+    let input = &mut Cursor::new(vec![0xFF; 9]);
+    assert_eq!(u64::max_value(), super::varint_read(input).unwrap());
+}
+
+#[test]
+fn varint_read_u64_zero() {
+    let input = &mut Cursor::new(vec![0x00; 9]);
+    assert_eq!(0, super::varint_read(input).unwrap());
+}
+
+#[test]
+fn varint_write_read_roundtrip_prng() {
+    let mut rng = thread_rng();
+    let seed: &[u32; 4] = &[rng.gen::<u32>(), rng.gen::<u32>(), rng.gen::<u32>(), rng.gen::<u32>()];
+    println!("Seed: {:?}", seed);
+
+    let mut prng: XorShiftRng = SeedableRng::from_seed(*seed);
+
+    for i in 1..1_000_000 {
+        let int: u64 = prng.gen();
+        let cursor = &mut Cursor::new(Vec::<u8>::new());
+        super::varint_write(int, cursor);
+        assert_eq!(int, super::varint_read(&mut Cursor::new(cursor.get_ref())).unwrap());
+    }
 }
 
 #[test]

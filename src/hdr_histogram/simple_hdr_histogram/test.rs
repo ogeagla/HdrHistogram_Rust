@@ -1045,11 +1045,13 @@ fn varint_write_read_roundtrip_prng() {
 
     let mut prng: XorShiftRng = SeedableRng::from_seed(*seed);
 
+    let mut vec = Vec::<u8>::new();
+    vec.reserve(9);
     for i in 1..1_000_000 {
+        vec.clear();
         let int: u64 = prng.gen();
-        let cursor = &mut Cursor::new(Vec::<u8>::new());
-        super::varint_write(int, cursor);
-        assert_eq!(int, super::varint_read(&mut Cursor::new(cursor.get_ref())).unwrap());
+        super::varint_write(int, &mut vec);
+        assert_eq!(int, super::varint_read(&mut vec.as_slice()).unwrap());
     }
 }
 

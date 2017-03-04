@@ -288,6 +288,74 @@ fn get_value_at_percentile_populated_exceed_desired_count_with_one_large_count()
     assert_eq!(2000, h.get_value_at_percentile(30.0));
 }
 
+// TODO can't shift right into bottom half
+// TODO can't shift left past end
+// TODO plain shift left
+// TODO plain shift right
+// TODO shift left and right is same
+// TODO shift right and left is same
+// TODO shift left, then write range that underflows
+// TODO shift left, then write range that underflows, then try to shift more
+// TODO shift right, then write range that overflows
+// TODO shift right, then write range that overflows, then try to shift more
+
+
+#[test]
+fn normalize_index_zero_offset_doesnt_change_index() {
+    let h = histo64(1, 100_000, 3);
+
+    assert_eq!(1234, h.normalize_index(1234, 0, h.counts.len()).unwrap())
+}
+
+#[test]
+fn normalize_index_simple() {
+    let h = histo64(1, 10_000, 3);
+    let i = h.counts_array_index(4096);
+
+    // end of second bucket
+    assert_eq!(3072, i);
+    // equivalent of one left shift. This will not lead to either over or underflow in index
+    // normalization.
+    assert_eq!(2048, h.normalize_index(i, 1024, h.counts.len()).unwrap());
+    // get original location if you ask for twice the original
+    assert_eq!(i, h.normalize_index(h.counts_array_index(4096 << 1), 1024, h.counts.len()).unwrap())
+}
+
+#[test]
+fn normalize_index_left_shift_underflow() {
+    let h = histo64(1, 10_000, 3);
+    let val = 1500;
+    let i = h.counts_array_index(val);
+    let len = 1024 * 5;
+    let offset = 2048;
+
+    // upper half of first bucket
+    assert_eq!(1500, i);
+    // equivalent of two left shift. This goes negative and has length added back in.
+    assert_eq!(1500 - offset + len, h.normalize_index(i, offset, h.counts.len()).unwrap() as i32);
+    assert_eq!(i, h.normalize_index(h.counts_array_index(val << 2), offset, h.counts.len()).unwrap())
+}
+
+#[test]
+fn normalize_index_right_shift_overflow() {
+    let h = histo64(1, 10_000, 3);
+    let val = 4096;
+    let i = h.counts_array_index(val);
+    let len = 1024 * 5;
+    let offset = -2048;
+
+    // start of third bucket
+    assert_eq!(3072, i);
+    // equivalent of two right shift. This goes past end and has length subtracted.
+    assert_eq!(3072 - offset - len, h.normalize_index(i, offset, h.counts.len()).unwrap() as i32);
+    assert_eq!(i, h.normalize_index(h.counts_array_index(val >> 2), offset, h.counts.len()).unwrap())
+}
+
+//
+// Tests below this line are ported to jonhoo/hdrsample
+//
+
+
 #[test]
 fn size_of_equivalent_value_range_unit_magnitude_0() {
     let h = histo64(1, 100_000, 3);
@@ -331,7 +399,6 @@ fn size_of_equivalent_value_range_unit_magnitude_2() {
     // end of 2nd bucket
     assert_eq!(8, h.size_of_equivalent_value_range(16384 - 7));
 }
-
 
 #[test]
 fn highest_equivalent_value_unit_magnitude_0() {
@@ -509,6 +576,7 @@ fn value_from_index_unit_magnitude_2() {
     assert_eq!(16384 - 8, h.value_from_index(3071));
 }
 
+
 #[test]
 fn get_bucket_index_smallest_value_in_first_bucket() {
     let h = histo64(1, 100_000, 3);
@@ -684,7 +752,6 @@ fn get_sub_bucket_index_value_above_biggest_doesnt_freak_out() {
     assert_eq!(466 + 1024, h.get_sub_bucket_index(100_000_000_000, h.get_bucket_index(100_000_000_000)));
 }
 
-
 #[test]
 fn counts_array_index_sub_first_bucket_first_entry() {
     let h = histo64(1, 100_000, 3);
@@ -748,68 +815,6 @@ fn counts_array_index_way_past_largest_value_exceeds_length() {
     assert_eq!(1024 * (30 + 1), h.counts_array_index(1 << 40));
 }
 
-// TODO can't shift right into bottom half
-// TODO can't shift left past end
-// TODO plain shift left
-// TODO plain shift right
-// TODO shift left and right is same
-// TODO shift right and left is same
-// TODO shift left, then write range that underflows
-// TODO shift left, then write range that underflows, then try to shift more
-// TODO shift right, then write range that overflows
-// TODO shift right, then write range that overflows, then try to shift more
-
-
-#[test]
-fn normalize_index_zero_offset_doesnt_change_index() {
-    let h = histo64(1, 100_000, 3);
-
-    assert_eq!(1234, h.normalize_index(1234, 0, h.counts.len()).unwrap())
-}
-
-#[test]
-fn normalize_index_simple() {
-    let h = histo64(1, 10_000, 3);
-    let i = h.counts_array_index(4096);
-
-    // end of second bucket
-    assert_eq!(3072, i);
-    // equivalent of one left shift. This will not lead to either over or underflow in index
-    // normalization.
-    assert_eq!(2048, h.normalize_index(i, 1024, h.counts.len()).unwrap());
-    // get original location if you ask for twice the original
-    assert_eq!(i, h.normalize_index(h.counts_array_index(4096 << 1), 1024, h.counts.len()).unwrap())
-}
-
-#[test]
-fn normalize_index_left_shift_underflow() {
-    let h = histo64(1, 10_000, 3);
-    let val = 1500;
-    let i = h.counts_array_index(val);
-    let len = 1024 * 5;
-    let offset = 2048;
-
-    // upper half of first bucket
-    assert_eq!(1500, i);
-    // equivalent of two left shift. This goes negative and has length added back in.
-    assert_eq!(1500 - offset + len, h.normalize_index(i, offset, h.counts.len()).unwrap() as i32);
-    assert_eq!(i, h.normalize_index(h.counts_array_index(val << 2), offset, h.counts.len()).unwrap())
-}
-
-#[test]
-fn normalize_index_right_shift_overflow() {
-    let h = histo64(1, 10_000, 3);
-    let val = 4096;
-    let i = h.counts_array_index(val);
-    let len = 1024 * 5;
-    let offset = -2048;
-
-    // start of third bucket
-    assert_eq!(3072, i);
-    // equivalent of two right shift. This goes past end and has length subtracted.
-    assert_eq!(3072 - offset - len, h.normalize_index(i, offset, h.counts.len()).unwrap() as i32);
-    assert_eq!(i, h.normalize_index(h.counts_array_index(val >> 2), offset, h.counts.len()).unwrap())
-}
 
 #[test]
 fn init_sub_bucket_count_medium_precision() {

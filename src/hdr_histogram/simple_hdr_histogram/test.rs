@@ -355,6 +355,95 @@ fn normalize_index_right_shift_overflow() {
 // Tests below this line are ported to jonhoo/hdrsample
 //
 
+#[test]
+fn varint_write_3_bit_value() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(6, buf);
+
+    let vec = buf.get_ref();
+    assert_eq!(1, vec.len());
+    assert_eq!(0x6, vec[0]);
+}
+
+
+#[test]
+fn varint_write_7_bit_value() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(127, buf);
+
+    let vec = buf.get_ref();
+    assert_eq!(1, vec.len());
+    assert_eq!(0x7F, vec[0]);
+}
+
+
+#[test]
+fn varint_write_9_bit_value() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(256, buf);
+
+    let vec = buf.get_ref();
+    // marker high bit w/ 0's, then 9th bit (2nd bit of 2nd 7-bit group)
+    assert_eq!(&vec![0x80, 0x02], buf.get_ref());
+}
+
+#[test]
+fn varint_write_u64_max() {
+    let buf = &mut Cursor::new(Vec::<u8>::new());
+    super::varint_write(u64::max_value(), buf);
+
+    assert_eq!(&vec![0xFF; 9], buf.get_ref());
+}
+
+#[test]
+fn varint_read_u64_max() {
+    let input = &mut Cursor::new(vec![0xFF; 9]);
+    assert_eq!(u64::max_value(), super::varint_read(input).unwrap());
+}
+
+#[test]
+fn varint_read_u64_zero() {
+    let input = &mut Cursor::new(vec![0x00; 9]);
+    assert_eq!(0, super::varint_read(input).unwrap());
+}
+
+#[test]
+fn varint_write_read_roundtrip_prng() {
+    let mut rng = thread_rng();
+    let seed: &[u32; 4] = &[rng.gen::<u32>(), rng.gen::<u32>(), rng.gen::<u32>(), rng.gen::<u32>()];
+    println!("Seed: {:?}", seed);
+
+    let mut prng: XorShiftRng = SeedableRng::from_seed(*seed);
+
+    let mut vec = Vec::<u8>::new();
+    vec.reserve(9);
+    for i in 1..1_000_000 {
+        vec.clear();
+        let int: u64 = prng.gen();
+        super::varint_write(int, &mut vec);
+        assert_eq!(int, super::varint_read(&mut vec.as_slice()).unwrap());
+    }
+}
+
+#[test]
+fn zig_zag_encode_0() {
+    assert_eq!(0, super::zig_zag_encode(0));
+}
+
+#[test]
+fn zig_zag_encode_neg_1() {
+    assert_eq!(1, super::zig_zag_encode(-1));
+}
+
+#[test]
+fn zig_zag_encode_i64_max() {
+    assert_eq!(u64::max_value() - 1, super::zig_zag_encode(i64::max_value()));
+}
+
+#[test]
+fn zig_zag_encode_i64_min() {
+    assert_eq!(u64::max_value(), super::zig_zag_encode(i64::min_value()));
+}
 
 #[test]
 fn size_of_equivalent_value_range_unit_magnitude_0() {
@@ -988,96 +1077,6 @@ fn init_leading_zero_count_base_unit_magnitude_2() {
     assert_eq!(10, h.sub_bucket_half_count_magnitude);
     assert_eq!(2, h.unit_magnitude);
     assert_eq!(51_usize, h.leading_zeros_count_base)
-}
-
-#[test]
-fn varint_write_3_bit_value() {
-    let buf = &mut Cursor::new(Vec::<u8>::new());
-    super::varint_write(6, buf);
-
-    let vec = buf.get_ref();
-    assert_eq!(1, vec.len());
-    assert_eq!(0x6, vec[0]);
-}
-
-
-#[test]
-fn varint_write_7_bit_value() {
-    let buf = &mut Cursor::new(Vec::<u8>::new());
-    super::varint_write(127, buf);
-
-    let vec = buf.get_ref();
-    assert_eq!(1, vec.len());
-    assert_eq!(0x7F, vec[0]);
-}
-
-
-#[test]
-fn varint_write_9_bit_value() {
-    let buf = &mut Cursor::new(Vec::<u8>::new());
-    super::varint_write(256, buf);
-
-    let vec = buf.get_ref();
-    // marker high bit w/ 0's, then 9th bit (2nd bit of 2nd 7-bit group)
-    assert_eq!(&vec![0x80, 0x02], buf.get_ref());
-}
-
-#[test]
-fn varint_write_u64_max() {
-    let buf = &mut Cursor::new(Vec::<u8>::new());
-    super::varint_write(u64::max_value(), buf);
-
-    assert_eq!(&vec![0xFF; 9], buf.get_ref());
-}
-
-#[test]
-fn varint_read_u64_max() {
-    let input = &mut Cursor::new(vec![0xFF; 9]);
-    assert_eq!(u64::max_value(), super::varint_read(input).unwrap());
-}
-
-#[test]
-fn varint_read_u64_zero() {
-    let input = &mut Cursor::new(vec![0x00; 9]);
-    assert_eq!(0, super::varint_read(input).unwrap());
-}
-
-#[test]
-fn varint_write_read_roundtrip_prng() {
-    let mut rng = thread_rng();
-    let seed: &[u32; 4] = &[rng.gen::<u32>(), rng.gen::<u32>(), rng.gen::<u32>(), rng.gen::<u32>()];
-    println!("Seed: {:?}", seed);
-
-    let mut prng: XorShiftRng = SeedableRng::from_seed(*seed);
-
-    let mut vec = Vec::<u8>::new();
-    vec.reserve(9);
-    for i in 1..1_000_000 {
-        vec.clear();
-        let int: u64 = prng.gen();
-        super::varint_write(int, &mut vec);
-        assert_eq!(int, super::varint_read(&mut vec.as_slice()).unwrap());
-    }
-}
-
-#[test]
-fn zig_zag_encode_0() {
-    assert_eq!(0, super::zig_zag_encode(0));
-}
-
-#[test]
-fn zig_zag_encode_neg_1() {
-    assert_eq!(1, super::zig_zag_encode(-1));
-}
-
-#[test]
-fn zig_zag_encode_i64_max() {
-    assert_eq!(u64::max_value() - 1, super::zig_zag_encode(i64::max_value()));
-}
-
-#[test]
-fn zig_zag_encode_i64_min() {
-    assert_eq!(u64::max_value(), super::zig_zag_encode(i64::min_value()));
 }
 
 #[cfg(test)]
